@@ -84,6 +84,10 @@ class TrustJsonTest {
         assertEquals(ActionDecision.ALLOW, allow.decision)
         assertEquals("payment", allow.actionType)
         assertEquals(5, JSONObject(allow.paramsJson!!).getInt("amountCents"))
+        assertEquals(
+            Decision.STEP_UP,
+            TrustJson.parseEnrollment("""{"decision":"STEP_UP","decisionId":"d","deviceId":"x"}""").decision,
+        )
         val stepUp = TrustJson.parseActionResult("""{"decision":"STEP_UP","decisionId":"d2"}""")
         assertEquals(ActionResult(ActionDecision.STEP_UP, "d2", null, null), stepUp)
     }
@@ -159,8 +163,16 @@ class DeviceTrustClientTest {
     }
 
     private var aliasCounter = 0
-    private fun client(api: TrustApi, attester: KeyAttester, store: EnrollmentStore, integrity: IntegrityTokenSource?) =
-        DeviceTrustClient(api, attester, integrity, store, { DEVICE }, { "alias_${++aliasCounter}" }, { 1_760_000_000_000L })
+    // integrity stays last so existing tests can pass it as a trailing lambda.
+    private fun client(
+        api: TrustApi,
+        attester: KeyAttester,
+        store: EnrollmentStore,
+        signals: com.devicetrust.client.signals.SignalCollector? = null,
+        integrity: IntegrityTokenSource? = null,
+    ) = DeviceTrustClient(
+        api, attester, integrity, store, { DEVICE }, { "alias_${++aliasCounter}" }, { 1_760_000_000_000L }, signals,
+    )
 
     @Test
     fun allowKeepsNewKeyAndReplacesOldBinding() = runTest {
@@ -276,6 +288,38 @@ class DeviceTrustClientTest {
         } catch (e: DeviceTrustException) {
             assertEquals(0, api.actionChallenges)
         }
+    }
+
+    @Test
+    fun signalsAreSentAtEnrollmentAndSignedIntoActions() = runTest {
+        val api = FakeApi(EnrollmentResult(Decision.ALLOW, "d", "dev_1"))
+        val report = { JSONObject().put("v", 1).put("hook_frida", false) }
+        val c = client(api, FakeAttester(spki), MemoryStore(), signals = { report() })
+        c.enroll()
+        assertEquals(1, api.sent!!.signals!!.getInt("v"))
+        val signed = c.signAction("login")
+        val doc = JSONObject(String(signed.signedData, Charsets.UTF_8))
+        assertFalse(doc.getJSONObject("signals").getBoolean("hook_frida"))
+    }
+
+    @Test
+    fun failingCollectorDoesNotBreakSigning() = runTest {
+        val c = client(
+            FakeApi(EnrollmentResult(Decision.ALLOW, "d", "dev_1")), FakeAttester(spki), MemoryStore(),
+            signals = { throw IllegalStateException("boom") },
+        )
+        c.enroll()
+        assertFalse(JSONObject(String(c.signAction("login").signedData, Charsets.UTF_8)).has("signals"))
+    }
+
+    @Test
+    fun stepUpEnrollmentIsKept() = runTest {
+        val store = MemoryStore()
+        val attester = FakeAttester(spki)
+        val result = client(FakeApi(EnrollmentResult(Decision.STEP_UP, "d", "dev_9")), attester, store, null).enroll()
+        assertEquals(Decision.STEP_UP, result.decision)
+        assertEquals("dev_9", store.value!!.deviceId)
+        assertTrue("alias_1" in attester.live)
     }
 
     @Test

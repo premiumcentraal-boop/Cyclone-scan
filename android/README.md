@@ -58,6 +58,29 @@ backend.submitPayment(payment)  // backend verifies with the trust service and e
 * `UserAuthenticationException`: the user cancelled the prompt.
 * `hasConfirmKey()` tells you whether high-risk actions can be confirmed on this phone; if not, the server answers STEP_UP and your backend should use out-of-band verification.
 
+### Client signals (Phase 3)
+
+The default `DeviceTrustClient(context, ...)` collects a small RASP report
+(`DeviceSignals`) and sends it at enrollment and **inside every signed
+action**:
+
+* root: `su` binaries, Magisk/KernelSU/APatch traces, root manager apps, test-keys, `/system` mounted rw
+* hooking: Frida (maps, default ports), Xposed/LSPosed (maps, classes, stack), Zygisk
+* debugging: attached debugger, `TracerPid`, debuggable build
+* emulator: build fingerprints, QEMU/Genymotion files
+* app integrity: installer package, signing certificate digest
+* scam indicators: active phone call, screen mirroring/casting, remote-access apps (AnyDesk, TeamViewer, RustDesk, AirDroid), enabled third-party accessibility services
+* developer options, ADB, VPN
+
+Only booleans, counts and short identifiers leave the phone; no app inventory
+beyond the fixed lists declared in the library's `<queries>`. All checks run
+off the main thread and never throw. The server weighs them; the app does not
+act on them itself.
+
+Also call `SecureWindow.apply(activity)` on screens that show balances or
+confirm payments: it blocks screenshots/recording/casting and, on Android 12+,
+hides other apps' overlays.
+
 Pass `cloudProjectNumber = null` for builds without Google Play services; the
 server policy decides whether that is acceptable.
 
@@ -74,6 +97,8 @@ Set `sdk.dir` in `local.properties` (or `ANDROID_HOME`) first.
 
 JVM unit tests cover the wire format, request-hash vectors shared with the
 server, key lifecycle on ALLOW / BLOCK / transport failure, and signed-action
-construction and signatures (with software keys standing in for AndroidKeyStore). Key generation
+construction and signatures (with software keys standing in for AndroidKeyStore),
+and every signal detector against a fake OS probe (including a hostile probe
+that throws everywhere). Key generation
 and Play Integrity need a real device: **physical-device verification has not
 been done yet.**

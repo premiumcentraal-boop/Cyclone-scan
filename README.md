@@ -17,7 +17,7 @@ run only inside the app.
 
 1. **Phase 1 (done):** enrollment with hard-fail gates.
 2. **Phase 2 (done):** device binding: sensitive actions signed with the enrolled hardware key; biometric-bound confirm key for high-risk actions; device revocation.
-3. **Phase 3:** client RASP signals and a server-side risk score.
+3. **Phase 3 (done):** client RASP signals (root, hooking, emulator, tampering, scam/remote-control indicators) and an explainable server-side risk score with an audit trail.
 4. **Phase 4:** policy tuning, dashboards, red-team test matrix, fallbacks.
 
 ## Quick start

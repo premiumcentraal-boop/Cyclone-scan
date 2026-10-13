@@ -7,7 +7,12 @@ challenge, and hands the parsed action back to the backend, which executes
 only what was signed ("what you see is what you sign").
 
     {"v": 1, "deviceId": "...", "challengeId": "...", "nonce": "<b64url>",
-     "ts": <epoch ms>, "action": {"type": "payment", "params": {...}}}
+     "ts": <epoch ms>, "action": {"type": "payment", "params": {...}},
+     "signals": {...}}            # optional client signal report (Phase 3)
+
+Signing the signal report with the hardware key means a proxy between app and
+server cannot strip or edit it; it does not stop code on a compromised phone
+from lying, which is why signals only add risk.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from .play_integrity import b64url
 ACTION_HASH_DOMAIN = b"device-trust/action/v1"
 MAX_SIGNED_DATA_BYTES = 8 * 1024
 _FIELDS = {"v", "deviceId", "challengeId", "nonce", "ts", "action"}
+_OPTIONAL_FIELDS = {"signals"}
 _ACTION_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 
 KEY_DEVICE = "device"
@@ -45,6 +51,8 @@ class SignedAction:
     timestamp_ms: int
     action_type: str
     params: dict
+    # Raw client signal report, validated by the caller (None if absent).
+    signals: object = None
 
 
 def action_request_hash(signed_data: bytes) -> str:
@@ -69,7 +77,7 @@ def parse_signed_data(signed_data: bytes) -> SignedAction:
         doc = json.loads(signed_data.decode("utf-8"), object_pairs_hook=_no_duplicates)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SignedDataError("signed data is not UTF-8 JSON") from exc
-    if not isinstance(doc, dict) or set(doc) != _FIELDS:
+    if not isinstance(doc, dict) or not _FIELDS <= set(doc) <= _FIELDS | _OPTIONAL_FIELDS:
         raise SignedDataError("signed data must have exactly the documented fields")
     if type(doc["v"]) is not int or doc["v"] != 1:
         raise SignedDataError("unsupported signed data version")
@@ -92,6 +100,7 @@ def parse_signed_data(signed_data: bytes) -> SignedAction:
         timestamp_ms=doc["ts"],
         action_type=action["type"],
         params=action["params"],
+        signals=doc.get("signals"),
     )
 
 

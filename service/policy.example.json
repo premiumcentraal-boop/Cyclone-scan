@@ -25,5 +25,33 @@
     "change_contact"
   ],
   "play_integrity_required_actions": [],
-  "confirm_key_allow_device_credential": false
+  "confirm_key_allow_device_credential": false,
+  "risk": {
+    "default_thresholds": {
+      "allow_below": 50,
+      "block_at": 80
+    },
+    "enrollment_thresholds": {
+      "allow_below": 60,
+      "block_at": 90
+    },
+    "action_thresholds": {
+      "payment": {
+        "allow_below": 35,
+        "block_at": 70
+      },
+      "add_payee": {
+        "allow_below": 35,
+        "block_at": 70
+      }
+    },
+    "weights": {
+      "env_in_call": 30
+    },
+    "trusted_installers": [
+      "com.android.vending"
+    ],
+    "velocity_window_seconds": 3600,
+    "velocity_max_actions": 30
+  }
 }

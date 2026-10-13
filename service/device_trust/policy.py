@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from .key_description import SecurityLevel
+from .risk import RiskPolicy
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,9 @@ class TrustPolicy:
     # Allow the confirm key to be unlocked with PIN/pattern as well as biometrics.
     confirm_key_allow_device_credential: bool = False
 
+    # Risk scoring (Phase 3) -------------------------------------------------
+    risk: RiskPolicy = field(default_factory=RiskPolicy)
+
     @classmethod
     def from_file(cls, path: str | Path) -> "TrustPolicy":
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -67,6 +71,8 @@ class TrustPolicy:
         for key in ("allowed_action_types", "confirm_key_required_actions", "play_integrity_required_actions"):
             if key in raw:
                 values[key] = frozenset(str(v) for v in raw[key])
+        if "risk" in raw:
+            values["risk"] = RiskPolicy.from_dict(raw["risk"])
         if "min_security_level" in raw:
             values["min_security_level"] = SecurityLevel[str(raw["min_security_level"]).upper()]
         policy = cls(**values)
