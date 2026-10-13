@@ -21,6 +21,12 @@ engine, not the production integration.
    each individual check. **Share report** exports privacy-safe JSON (no
    serial, IMEI or accounts) — collect these from many phones to calibrate.
 
+The scan also shows a **Keybox & spoofing** group: whether the attestation
+key was provisioned by Google (RKP) or comes from a factory keybox, whether a
+factory keybox appears on a phone that only uses RKP (the TrickyStore
+pattern), and whether the security patch and Android version the OS reports
+match what the hardware attests (property spoofing).
+
 **Biometric** — creates a biometric-bound confirm key, shows what the
 hardware attests about it (strong biometric only, auth for every signature),
 then asks you to approve a €1.00 test payment and verifies the signature.

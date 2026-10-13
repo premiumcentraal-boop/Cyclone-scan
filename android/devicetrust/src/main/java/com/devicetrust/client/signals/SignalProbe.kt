@@ -36,6 +36,10 @@ data class BuildInfo(
     val manufacturer: String,
     val brand: String,
     val device: String,
+    /** Build.VERSION.SECURITY_PATCH, e.g. "2026-09-05" (cross-checked with the attested patch). */
+    val securityPatch: String = "",
+    /** Build.VERSION.RELEASE, e.g. "16" (cross-checked with the attested OS version). */
+    val release: String = "",
 )
 
 data class AccessibilityServiceRef(val packageName: String, val isSystemApp: Boolean)

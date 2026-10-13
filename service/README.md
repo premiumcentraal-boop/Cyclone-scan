@@ -150,6 +150,44 @@ returns status, attested facts and recent decisions for the fraud team.
 With `--expose-reasons`, API responses also carry
 `risk: {score, factors:[{factor, points}]}`.
 
+## Run 6: attestation provenance and keybox defence
+
+The professional bypass for hardware attestation is a **leaked factory
+keybox** replayed by tools such as TrickyStore: the chain is genuinely signed
+up to Google's root, so it passes every cryptographic check until Google
+revokes it. Run 6 adds defences that work *before* revocation.
+
+**Chain provenance.** Every verified chain is classified:
+
+* `RKP`: exactly `leaf ← per-device key ← "Droid CA3" ← "Droid CA2" ← Google root`.
+  The per-device key is short-lived and issued online by Google's Remote Key
+  Provisioning. Only Google holds the Droid CA keys, so a leaked keybox cannot
+  produce this shape (a fake "Droid CA3" signed by a keybox sits at the wrong
+  position with the wrong issuer and is classified `FACTORY`).
+* `FACTORY`: a keybox injected at manufacture: normal for older phones, and
+  the only kind that leaks.
+
+Verified on Google's real test chains (Pixel 8a/9 Pro/9a/10 TEE and StrongBox
+→ RKP; Pixel 3, Sony → factory).
+
+| Factor | Points | Meaning |
+|---|---|---|
+| `attestation_not_rkp_on_rkp_model` | 80 | Factory chain on a phone that only attests EC keys via RKP (Pixel 7 and newer; `risk.rkp_required_models`). Attested model, else reported model. |
+| `attestation_factory_keybox_modern_os` | 10 | Factory chain on Android 14+ (weak on its own: many upgraded phones still use factory keys) |
+| `attestation_key_model_conflict` | 80 | The same attestation key has been seen claiming two different models: a shared keybox. Re-evaluated on every action, so devices enrolled before the leak are flagged too. |
+| `attestation_key_reuse` | 50 | ≥ `risk.keybox_reuse_threshold` (5) enrollments with one attestation key within `risk.keybox_window_seconds` (30 days) |
+| `patch_spoofed` | 50 | `Build.VERSION.SECURITY_PATCH` reported by the app ≠ hardware-attested patch (property spoofing, e.g. PlayIntegrityFix) |
+| `os_version_mismatch` | 40 | `Build.VERSION.RELEASE` major ≠ attested OS version |
+| `patch_level_inconsistent` | 10 | OS vs vendor/boot patch more than 24 months apart (a genuine Pixel 3 shows 11 months, so the tolerance is wide) |
+
+With defaults, a leaked keybox posing as a Pixel enrolls only as STEP_UP and
+every action is BLOCKed. `"require_rkp": true` turns any non-RKP chain into a
+hard failure (`ATTESTATION_NOT_RKP`). It is the strongest setting, but it rejects
+phones that only have factory keys.
+
+Every enrollment attempt (including blocked ones) records its attestation-key
+hash and claimed model in `attestation_key_uses`.
+
 ### Revoking a device
 
 * CLI: `device-trust revoke --db devices.sqlite --device-id dev_... --reason "lost phone"`

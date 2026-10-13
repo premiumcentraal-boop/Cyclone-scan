@@ -26,6 +26,10 @@ class TrustPolicy:
     allowed_self_signed_boot_keys: frozenset[str] = frozenset()
     # Allowed clock skew when checking certificate validity windows.
     clock_skew_seconds: int = 300
+    # Hard-require Google RKP-provisioned attestation keys (Run 6). Strongest
+    # defence against leaked factory keyboxes, but rejects older phones that
+    # only have factory keys; the risk engine's model list is the softer default.
+    require_rkp: bool = False
 
     # Challenge / Play Integrity --------------------------------------------
     challenge_ttl_seconds: int = 120

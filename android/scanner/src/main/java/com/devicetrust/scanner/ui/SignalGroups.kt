@@ -59,5 +59,17 @@ fun signalGroups(signals: JSONObject, factors: List<Pair<String, Int>>): List<Si
             if ("app_signature_mismatch" in points) "re-signed or tampered app" else "untampered"),
     )
     groups.add(3, SignalGroup("App integrity", appRows))
+
+    fun factorRow(key: String, okText: String) = SignalRow(
+        LocalRisk.DESCRIPTIONS[key]?.substringBefore(" (") ?: key,
+        if (key in points) (if ((points[key] ?: 0) >= 40) Check.Status.FAIL else Check.Status.WARN) else Check.Status.PASS,
+        if (key in points) "detected · +${points[key]} risk" else okText,
+    )
+    groups.add(0, SignalGroup("Keybox & spoofing", listOf(
+        factorRow("attestation_not_rkp_on_rkp_model", "key provenance fits this model"),
+        factorRow("patch_spoofed", "reported patch matches hardware"),
+        factorRow("os_version_mismatch", "reported Android version matches hardware"),
+        factorRow("patch_level_inconsistent", "OS, vendor and boot patches consistent"),
+    )))
     return groups
 }

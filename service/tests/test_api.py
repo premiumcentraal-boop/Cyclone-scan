@@ -81,7 +81,7 @@ def test_genuine_enrollment_is_allowed_and_registered(policy, pki):
     assert data["decision"] == "ALLOW", data
     assert data["deviceId"].startswith("dev_") and data["decisionId"].startswith("dec_")
     stored = service._registry.get(data["deviceId"])
-    assert stored.evidence["attested_ids"]["model"] == "Pixel 8"
+    assert stored.evidence["attested_ids"]["model"] == "SM-S928B"
     assert "SERIAL123" not in repr(stored)
 
 
@@ -119,7 +119,7 @@ def test_reasons_hidden_by_default(policy, pki, caplog):
 
 def test_spoofed_model_blocked(policy, pki):
     client, _ = build(policy, pki)
-    data = device_enroll(client, pki, device=dict(DEVICE_IDS, model="SM-S928B"))[0].json()
+    data = device_enroll(client, pki, device=dict(DEVICE_IDS, model="Pixel 9 Pro"))[0].json()
     assert data["reasons"] == [R.DEVICE_ID_MISMATCH]
 
 

@@ -130,6 +130,24 @@ class OnDeviceEngineTest {
     }
 
     @Test
+    fun realChainsAreClassifiedLikeTheServer() {
+        assertEquals(ChainVerifier.CHAIN_RKP, run("caiman_sdk36_TEE_EC_RKP").report.chainType)
+        assertEquals(ChainVerifier.CHAIN_RKP, run("caiman_sdk36_SB_EC_RKP").report.chainType)
+        assertEquals(ChainVerifier.CHAIN_RKP, run("frankel_sdk37_TEE_EC_2026").report.chainType)
+        assertEquals(ChainVerifier.CHAIN_FACTORY, run("sony-xperia10-iii_sdk33_TEE_EC").report.chainType)
+        // Untrusted root: never classified.
+        assertNull(run("marlin_sdk29_TEE_EC_NONE").report.chainType)
+    }
+
+    @Test
+    fun rfc2253ParserHandlesEscapes() {
+        val attrs = ChainVerifier.rfc2253Attributes("CN=Droid CA3,O=Google LLC")
+        assertEquals("Droid CA3", attrs["CN"])
+        assertEquals("Google LLC", attrs["O"])
+        assertEquals("Google, Inc.", ChainVerifier.rfc2253Attributes("O=Google\\, Inc.,C=US")["O"])
+    }
+
+    @Test
     fun patchAge() {
         val now = Date.from(OffsetDateTime.parse("2026-10-13T00:00:00Z").toInstant())
         assertEquals(1, ChainVerifier.patchAgeMonths(202609, now))
@@ -147,15 +165,29 @@ class RiskParityTest {
         val trusted = doc.getJSONArray("trusted_digests").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
         assertEquals(LocalRisk.ALLOW_BELOW, doc.getJSONObject("thresholds").getInt("allow_below"))
         assertEquals(LocalRisk.BLOCK_AT, doc.getJSONObject("thresholds").getInt("block_at"))
+        val models = doc.getJSONArray("rkp_required_models").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+        assertEquals(models, LocalRisk.RKP_REQUIRED_MODELS)
         val cases = doc.getJSONArray("cases")
-        assertTrue(cases.length() >= 30)
+        assertTrue(cases.length() >= 45)
         for (i in 0 until cases.length()) {
             val c = cases.getJSONObject(i)
             val ev = c.getJSONObject("evidence")
+            val ids = ev.optJSONObject("attested_ids")
+            fun optIntOrNull(key: String) = if (ev.has(key)) ev.getInt(key) else null
+            val reported = c.optJSONObject("reported")?.let { r -> r.keys().asSequence().associateWith { r.getString(it) } }
             val result = LocalRisk.assess(
                 c.getJSONObject("signals"),
-                LocalRisk.Evidence(ev.optInt("os_patch_level"), ev.optString("attestation_security_level")),
-                trusted, now,
+                LocalRisk.Evidence(
+                    osPatchLevel = optIntOrNull("os_patch_level"),
+                    securityLevel = ev.optString("attestation_security_level"),
+                    chainType = ev.optString("chain_type").ifEmpty { null },
+                    attestedBrand = ids?.optString("brand")?.ifEmpty { null },
+                    attestedModel = ids?.optString("model")?.ifEmpty { null },
+                    osVersion = optIntOrNull("os_version"),
+                    vendorPatchLevel = optIntOrNull("vendor_patch_level"),
+                    bootPatchLevel = optIntOrNull("boot_patch_level"),
+                ),
+                trusted, now, reported,
             )
             val exp = c.getJSONObject("expected")
             val expFactors = exp.getJSONArray("factors").let { a ->

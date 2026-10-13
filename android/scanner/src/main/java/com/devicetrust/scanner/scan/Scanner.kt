@@ -33,7 +33,7 @@ class ScanResult(
     val hardFailures: List<Check> get() = attestation.hardFailures
 
     fun toJson(): JSONObject = JSONObject().apply {
-        put("scanner", "device-trust-scanner/0.4.0")
+        put("scanner", "device-trust-scanner/0.5.0")
         put("scannedAt", scannedAt.time)
         put("verdict", verdict.name)
         put("score", score)
@@ -52,6 +52,9 @@ class ScanResult(
                 put("osPatchLevel", kd.hardwareEnforced.osPatchLevel)
                 put("vendorPatchLevel", kd.hardwareEnforced.vendorPatchLevel)
                 put("bootState", kd.hardwareEnforced.rootOfTrust?.verifiedBootState?.name)
+                put("chainType", attestation.chainType)
+                put("osVersion", kd.hardwareEnforced.osVersion)
+                put("bootPatchLevel", kd.hardwareEnforced.bootPatchLevel)
                 put("deviceLocked", kd.hardwareEnforced.rootOfTrust?.deviceLocked)
                 put("attestedIds", JSONObject(kd.hardwareEnforced.attestedIds as Map<*, *>))
             }
@@ -112,10 +115,23 @@ class Scanner(private val context: Context) {
             ?.signatureDigests?.map { d -> d.joinToString("") { "%02x".format(it) } }?.toSet().orEmpty()
             // Without attestation there is nothing to compare against; the hard failure already blocks.
             .ifEmpty { setOfNotNull(signals.optString("app_signature_sha256").ifEmpty { null }) }
+        val hw = kd?.hardwareEnforced
         val risk = LocalRisk.assess(
             signals,
-            kd?.let { LocalRisk.Evidence(it.hardwareEnforced.osPatchLevel, it.attestationSecurityLevel.name) },
+            kd?.let {
+                LocalRisk.Evidence(
+                    osPatchLevel = hw?.osPatchLevel,
+                    securityLevel = it.attestationSecurityLevel.name,
+                    chainType = report.chainType,
+                    attestedBrand = hw?.attestedIds?.get("brand"),
+                    attestedModel = hw?.attestedIds?.get("model"),
+                    osVersion = hw?.osVersion,
+                    vendorPatchLevel = hw?.vendorPatchLevel,
+                    bootPatchLevel = hw?.bootPatchLevel,
+                )
+            },
             attestedDigests,
+            reportedIds = mapOf("brand" to device.brand, "model" to device.model),
         )
         val verdict = when {
             report.hardFailures.isNotEmpty() -> Verdict.BLOCK

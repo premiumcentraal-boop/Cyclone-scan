@@ -33,7 +33,12 @@ BOOL_SIGNALS = frozenset({
     "env_remote_access_a11y",
 })
 INT_SIGNALS = frozenset({"env_a11y_third_party"})
-STR_SIGNALS = frozenset({"app_installer", "app_signature_sha256"})
+STR_SIGNALS = frozenset({
+    "app_installer", "app_signature_sha256",
+    # Reported OS facts, cross-checked against the hardware attestation (Run 6):
+    # Build.VERSION.SECURITY_PATCH ("2026-09-05") and Build.VERSION.RELEASE ("16").
+    "os_security_patch", "os_release",
+})
 LIST_SIGNALS = frozenset({"env_remote_access_apps"})
 
 MAX_STR = 128

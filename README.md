@@ -20,7 +20,9 @@ run only inside the app.
 1. **Phase 1 (done):** enrollment with hard-fail gates.
 2. **Phase 2 (done):** device binding: sensitive actions signed with the enrolled hardware key; biometric-bound confirm key for high-risk actions; device revocation.
 3. **Phase 3 (done):** client RASP signals (root, hooking, emulator, tampering, scam/remote-control indicators) and an explainable server-side risk score with an audit trail.
-4. **Phase 4:** policy tuning, dashboards, red-team test matrix, fallbacks.
+4. **Scanner APK (done):** on-device demo/test app (`android/scanner`).
+5. **Run 6 (done):** attestation provenance (Google RKP vs factory keybox), fleet-wide leaked-keybox detection, hardware-vs-reported patch/OS spoofing checks.
+6. **Next build runs:** native detection core (C/NDK), hook-resistant integrity, SDK self-protection, continuous protection, scam/malware depth, fleet intelligence, attack lab + benchmark. Real-device verification follows the build runs.
 
 ## Quick start
 

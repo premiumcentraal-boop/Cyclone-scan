@@ -32,7 +32,7 @@ from .key_description import AUTH_BIOMETRIC, AUTH_PASSWORD
 from .play_integrity import DecodeError, IntegrityTokenDecoder, b64url, enrollment_request_hash, evaluate_payload
 from .policy import TrustPolicy
 from .registry import DeviceRegistry, DuplicateDeviceKey
-from .risk import RiskInput, RiskResult, assess
+from .risk import RiskInput, RiskResult, assess, device_model_key
 from .risk import BLOCK as RISK_BAND_BLOCK
 from .risk import STEP_UP as RISK_BAND_STEP_UP
 from .signals import SignalsError, parse_client_signals
@@ -214,8 +214,19 @@ class DeviceTrustService:
 
         risk = None
         if att.evidence is not None:
+            evidence = asdict(att.evidence)
+            keybox = None
+            if att.evidence.attestation_key_sha256:
+                # Recorded even for attempts that end up blocked: failed replays
+                # of a leaked keybox are exactly what this table should see.
+                self._registry.record_attestation_key(
+                    att.evidence.attestation_key_sha256, decision_id, device_model_key(evidence, req.reported_ids),
+                )
+                keybox = self._registry.attestation_key_stats(
+                    att.evidence.attestation_key_sha256, self.policy.risk.keybox_window_seconds,
+                )
             risk = assess(
-                RiskInput(client_signals, play_signals, asdict(att.evidence)),
+                RiskInput(client_signals, play_signals, evidence, reported_ids=req.reported_ids, keybox=keybox),
                 self.policy.risk, self.policy.signing_cert_sha256, action_type=None, now=now,
             )
             if (risk_reason := _risk_reason(risk)) is not None:
@@ -337,6 +348,7 @@ class DeviceTrustService:
             except SignalsError:
                 reasons.append(R.SIGNALS_MALFORMED)
         now_s = now.timestamp() if now else time.time()
+        key_sha = record.evidence.get("attestation_key_sha256")
         risk = assess(
             RiskInput(
                 client_signals,
@@ -344,6 +356,9 @@ class DeviceTrustService:
                 record.evidence,
                 device_age_seconds=now_s - record.enrolled_at,
                 recent_actions=self._registry.count_recent_actions(req.device_id, p.risk.velocity_window_seconds),
+                # Re-evaluated on every action: a keybox that leaks after this
+                # device enrolled still flags it.
+                keybox=self._registry.attestation_key_stats(key_sha, p.risk.keybox_window_seconds) if key_sha else None,
             ),
             p.risk, p.signing_cert_sha256, action_type=action.action_type, now=now,
         )

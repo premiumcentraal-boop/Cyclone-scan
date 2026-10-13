@@ -50,6 +50,8 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
         manufacturer = Build.MANUFACTURER.orEmpty(),
         brand = Build.BRAND.orEmpty(),
         device = Build.DEVICE.orEmpty(),
+        securityPatch = Build.VERSION.SECURITY_PATCH.orEmpty(),
+        release = Build.VERSION.RELEASE.orEmpty(),
     )
 
     override fun isPackageInstalled(packageName: String): Boolean = runCatching {

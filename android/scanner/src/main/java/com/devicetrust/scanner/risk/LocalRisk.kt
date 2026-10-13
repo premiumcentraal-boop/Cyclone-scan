@@ -28,17 +28,44 @@ object LocalRisk {
         "env_dev_options" to 5, "env_adb" to 10, "env_vpn" to 5, "env_in_call" to 25, "env_external_display" to 30,
         "env_a11y_third_party" to 10, "env_remote_access_apps" to 15, "env_remote_access_a11y" to 45,
         "client_signals_missing" to 20,
+        "attestation_not_rkp_on_rkp_model" to 80, "attestation_factory_keybox_modern_os" to 10,
+        "patch_spoofed" to 50, "os_version_mismatch" to 40, "patch_level_inconsistent" to 10,
         "os_patch_stale" to 10, "no_strongbox" to 0,
     )
+
+    /** Same list as DEFAULT_RKP_REQUIRED_MODELS on the server ("brand/model", lowercase). */
+    val RKP_REQUIRED_MODELS: Set<String> = listOf(
+        "Pixel 7", "Pixel 7 Pro", "Pixel 7a", "Pixel Fold", "Pixel Tablet",
+        "Pixel 8", "Pixel 8 Pro", "Pixel 8a",
+        "Pixel 9", "Pixel 9 Pro", "Pixel 9 Pro XL", "Pixel 9 Pro Fold", "Pixel 9a",
+        "Pixel 10", "Pixel 10 Pro", "Pixel 10 Pro XL", "Pixel 10 Pro Fold",
+    ).map { "google/" + it.lowercase() }.toSet()
+    const val MODERN_OS_MAJOR = 14
+    const val PATCH_INCONSISTENCY_MONTHS = 24
 
     val TRUSTED_INSTALLERS = setOf("com.android.vending")
     const val STALE_PATCH_MONTHS = 6
 
     data class Result(val score: Int, val band: String, val factors: List<Pair<String, Int>>)
 
-    data class Evidence(val osPatchLevel: Int?, val securityLevel: String?)
+    data class Evidence(
+        val osPatchLevel: Int?,
+        val securityLevel: String?,
+        val chainType: String? = null,
+        val attestedBrand: String? = null,
+        val attestedModel: String? = null,
+        val osVersion: Int? = null,
+        val vendorPatchLevel: Int? = null,
+        val bootPatchLevel: Int? = null,
+    )
 
-    fun assess(signals: JSONObject?, evidence: Evidence?, trustedDigests: Set<String>, now: Date = Date()): Result {
+    fun assess(
+        signals: JSONObject?,
+        evidence: Evidence?,
+        trustedDigests: Set<String>,
+        now: Date = Date(),
+        reportedIds: Map<String, String>? = null,
+    ): Result {
         val found = mutableListOf<String>()
         if (signals == null) {
             found += "client_signals_missing"
@@ -59,6 +86,8 @@ object LocalRisk {
             val age = evidence.osPatchLevel?.let { ChainVerifier.patchAgeMonths(it, now) }
             if (age != null && age > STALE_PATCH_MONTHS) found += "os_patch_stale"
             if (evidence.securityLevel != "STRONG_BOX") found += "no_strongbox"
+            found += provenanceFactors(evidence, reportedIds)
+            found += consistencyFactors(evidence, signals)
         }
         val factors = found.distinct().map { it to (WEIGHTS[it] ?: 0) }
             .sortedWith(compareBy({ -it.second }, { it.first }))
@@ -69,6 +98,61 @@ object LocalRisk {
             else -> ALLOW
         }
         return Result(score, band, factors)
+    }
+
+    private fun monthIndex(level: Int): Int? {
+        val ym = if (level > 999_999) level / 100 else level
+        val year = ym / 100
+        val month = ym % 100
+        if (month !in 1..12 || year < 2000) return null
+        return year * 12 + month - 1
+    }
+
+    fun modelKey(e: Evidence, reported: Map<String, String>?): String? {
+        var brand = e.attestedBrand
+        var model = e.attestedModel
+        if (brand.isNullOrEmpty() || model.isNullOrEmpty()) {
+            brand = reported?.get("brand")
+            model = reported?.get("model")
+        }
+        return if (!brand.isNullOrEmpty() && !model.isNullOrEmpty()) "$brand/$model".lowercase() else null
+    }
+
+    private fun provenanceFactors(e: Evidence, reported: Map<String, String>?): List<String> {
+        if (e.chainType != "FACTORY") return emptyList()
+        val out = mutableListOf<String>()
+        if (modelKey(e, reported) in RKP_REQUIRED_MODELS) out += "attestation_not_rkp_on_rkp_model"
+        if (e.osVersion != null && e.osVersion / 10000 >= MODERN_OS_MAJOR) out += "attestation_factory_keybox_modern_os"
+        return out
+    }
+
+    private fun consistencyFactors(e: Evidence, client: JSONObject?): List<String> {
+        val out = mutableListOf<String>()
+        val attested = e.osPatchLevel?.let(::monthIndex)
+        for (other in listOf(e.vendorPatchLevel, e.bootPatchLevel)) {
+            val m = other?.let(::monthIndex)
+            if (attested != null && m != null && kotlin.math.abs(attested - m) > PATCH_INCONSISTENCY_MONTHS) {
+                out += "patch_level_inconsistent"
+                break
+            }
+        }
+        if (client != null) {
+            val patch = if (client.isNull("os_security_patch")) null else client.optString("os_security_patch", "")
+            if (attested != null && patch != null && patch.length >= 7) {
+                val year = patch.substring(0, 4).toIntOrNull()
+                val month = patch.substring(5, 7).toIntOrNull()
+                val reported = if (year != null && month != null) monthIndex(year * 100 + month) else null
+                if (reported != null && reported != attested) out += "patch_spoofed"
+            }
+            val release = if (client.isNull("os_release")) null else client.optString("os_release", "")
+            val major = release?.substringBefore('.')
+            if (major != null && major.isNotEmpty() && major.all(Char::isDigit) && e.osVersion != null && e.osVersion > 0 &&
+                major.toInt() != e.osVersion / 10000
+            ) {
+                out += "os_version_mismatch"
+            }
+        }
+        return out
     }
 
     /** Plain-language explanation for each factor, shown in the app. */
@@ -98,6 +182,11 @@ object LocalRisk {
         "env_remote_access_apps" to "Remote-control app installed",
         "env_remote_access_a11y" to "Remote-control app has accessibility control",
         "client_signals_missing" to "No client signals",
+        "attestation_not_rkp_on_rkp_model" to "Factory keybox on a phone that only uses Google RKP keys (leaked keybox?)",
+        "attestation_factory_keybox_modern_os" to "Factory keybox instead of Google-provisioned key on Android 14+",
+        "patch_spoofed" to "Reported security patch differs from the hardware-attested one",
+        "os_version_mismatch" to "Reported Android version differs from the hardware-attested one",
+        "patch_level_inconsistent" to "OS, vendor and boot patch levels far apart",
         "os_patch_stale" to "Security patch older than 6 months",
         "no_strongbox" to "No StrongBox chip (informational)",
     )

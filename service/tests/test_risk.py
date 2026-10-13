@@ -274,7 +274,7 @@ def test_admin_device_detail_shows_decisions_without_params(env):
     r = env.client.get(f"/v1/admin/devices/{phone.device_id}", headers={"Authorization": f"Bearer {ADMIN}"})
     assert r.status_code == 200
     detail = r.json()
-    assert detail["status"] == "active" and detail["attested"]["model"] == "Pixel 8"
+    assert detail["status"] == "active" and detail["attested"]["model"] == "SM-S928B"
     latest = detail["decisions"][0]
     assert latest["kind"] == "action" and latest["actionType"] == "payment" and latest["decision"] == "BLOCK"
     assert latest["factors"][0] == {"factor": "hook_frida", "points": 70}

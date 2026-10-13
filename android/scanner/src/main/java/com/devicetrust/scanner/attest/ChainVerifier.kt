@@ -11,6 +11,7 @@ import java.security.cert.X509Certificate
 import java.util.Calendar
 import java.util.Date
 import java.util.TimeZone
+import javax.security.auth.x500.X500Principal
 
 /** One check shown in the report: passed / failed / not applicable, with detail text. */
 data class Check(val id: String, val label: String, val status: Status, val detail: String = "") {
@@ -24,6 +25,8 @@ class AttestationReport(
     val chainLength: Int,
     val rootSubject: String?,
     val revocationChecked: Boolean,
+    /** "RKP", "FACTORY" or null when the chain could not be verified. */
+    val chainType: String? = null,
 ) {
     val hardFailures: List<Check> get() = checks.filter { it.status == Check.Status.FAIL }
 }
@@ -103,7 +106,17 @@ class ChainVerifier(
             return AttestationReport(checks, null, certs.size, shortName(root), revokedSerials != null)
         }
         contentChecks(kd, expectedChallenge, expectedPackage, reportedIds, maxPatchAgeMonths, now, checks)
-        return AttestationReport(checks, kd, certs.size, shortName(root), revokedSerials != null)
+        val chainType = if (sigOk && rootTrusted) classify(certs) else null
+        checks += Check(
+            "provenance", "Key provisioned by Google (RKP)",
+            if (chainType == CHAIN_RKP) Check.Status.PASS else Check.Status.INFO,
+            when (chainType) {
+                CHAIN_RKP -> "short-lived per-device key from Google's Remote Key Provisioning"
+                CHAIN_FACTORY -> "factory keybox (normal for older phones; the kind that leaks)"
+                else -> "unknown"
+            },
+        )
+        return AttestationReport(checks, kd, certs.size, shortName(root), revokedSerials != null, chainType)
     }
 
     private fun contentChecks(
@@ -193,6 +206,61 @@ class ChainVerifier(
 
     companion object {
         const val GOOGLE_STATUS_URL = "https://android.googleapis.com/attestation/status"
+        const val CHAIN_RKP = "RKP"
+        const val CHAIN_FACTORY = "FACTORY"
+
+        /**
+         * Port of service classify_chain: RKP chains are exactly leaf <- per-device key
+         * <- "Droid CA3" <- "Droid CA2" <- Google root. Only valid on a chain whose
+         * signatures and root were already verified.
+         */
+        fun classify(certs: List<X509Certificate>): String {
+            if (certs.size == 5) {
+                val ca3 = certs[2]
+                val ca2 = certs[3]
+                if (cnOrg(ca3) == ("Droid CA3" to "Google LLC") &&
+                    cnOrg(ca2) == ("Droid CA2" to "Google LLC") &&
+                    certs[1].issuerX500Principal == ca3.subjectX500Principal &&
+                    ca3.issuerX500Principal == ca2.subjectX500Principal &&
+                    ca2.issuerX500Principal == certs[4].subjectX500Principal
+                ) {
+                    return CHAIN_RKP
+                }
+            }
+            return CHAIN_FACTORY
+        }
+
+        private fun cnOrg(c: X509Certificate): Pair<String?, String?> {
+            val attrs = rfc2253Attributes(c.subjectX500Principal.getName(X500Principal.RFC2253))
+            return attrs["CN"] to attrs["O"]
+        }
+
+        /**
+         * Minimal RFC 2253 parser ("CN=Droid CA3,O=Google LLC"), honouring backslash
+         * escapes. javax.naming is not available on Android, so no LdapName.
+         */
+        fun rfc2253Attributes(name: String): Map<String, String> {
+            val out = mutableMapOf<String, String>()
+            val part = StringBuilder()
+            fun flush() {
+                val rdn = part.toString()
+                part.clear()
+                val eq = rdn.indexOf('=')
+                if (eq > 0) out.putIfAbsent(rdn.substring(0, eq).trim().uppercase(), rdn.substring(eq + 1).trim())
+            }
+            var i = 0
+            while (i < name.length) {
+                val ch = name[i]
+                when {
+                    ch == '\\' && i + 1 < name.length -> { part.append(name[i + 1]); i += 2; continue }
+                    ch == ',' || ch == '+' -> flush()
+                    else -> part.append(ch)
+                }
+                i++
+            }
+            flush()
+            return out
+        }
 
         fun rootKeysFromJson(json: String): List<ByteArray> {
             val cf = CertificateFactory.getInstance("X.509")
