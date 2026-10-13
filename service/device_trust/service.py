@@ -222,16 +222,16 @@ class DeviceTrustService:
 
         risk = None
         network = self._networks.network_key(req.client_ip)
-        cohort = cohort_key(asdict(att.evidence), req.reported_ids) if att.evidence else None
+        cohort = cohort_key(asdict(att.evidence), req.reported_ids) if att.ok and att.evidence else None
         # Every attempt counts, including ones that fail: a farm's failures are part of its burst.
         self._registry.record_fleet_event("enrollment", decision_id, None, network, cohort)
         fleet = self._registry.fleet_counts(network, cohort, self.policy.risk.fleet_window_seconds)
         if att.evidence is not None:
             evidence = asdict(att.evidence)
             keybox = None
-            if att.evidence.attestation_key_sha256:
-                # Recorded even for attempts that end up blocked: failed replays
-                # of a leaked keybox are exactly what this table should see.
+            if att.ok and att.evidence.attestation_key_sha256:
+                # Only fresh, verified ownership contributes to trusted key history.
+                # Invalid nonce/identity submissions cannot poison another device.
                 self._registry.record_attestation_key(
                     att.evidence.attestation_key_sha256, decision_id, device_model_key(evidence, req.reported_ids),
                 )
@@ -268,7 +268,8 @@ class DeviceTrustService:
             return [R.CONFIRM_KEY_INVALID]
         out = []
         dev, con = device.evidence, confirm.evidence
-        # Both keys must come from the same secure hardware, and be different keys.
+        # These checks require consistent boot/model evidence and distinct keys.
+        # They do NOT prove physical co-residency: same-model phones can share these facts.
         if (
             con.leaf_spki_sha256 == dev.leaf_spki_sha256
             or con.verified_boot_key_sha256 != dev.verified_boot_key_sha256
@@ -363,7 +364,11 @@ class DeviceTrustService:
                 reasons.append(R.SIGNALS_MALFORMED)
         now_s = now.timestamp() if now else time.time()
         network = self._networks.network_key(req.client_ip)
-        self._registry.record_fleet_event("action", decision_id, req.device_id, network, None)
+        # Invalid signatures cannot inflate the count of devices seen on a network.
+        self._registry.record_fleet_event(
+            "action" if decide(reasons) != BLOCK else "action_attempt",
+            decision_id, req.device_id if decide(reasons) != BLOCK else None, network, None,
+        )
         key_sha = record.evidence.get("attestation_key_sha256")
         risk = assess(
             RiskInput(

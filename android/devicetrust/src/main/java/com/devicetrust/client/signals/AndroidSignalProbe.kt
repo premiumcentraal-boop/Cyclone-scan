@@ -34,7 +34,8 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
                 if (n < 0) break
                 total += n
             }
-            String(buf, 0, total, Charsets.UTF_8)
+            if ((total == MAX_READ && input.read() != -1) || (0 until total).any { buf[it] == 0.toByte() }) null
+            else String(buf, 0, total, Charsets.UTF_8)
         }
     }.getOrNull()
 

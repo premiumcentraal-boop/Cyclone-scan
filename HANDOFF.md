@@ -4,8 +4,8 @@ Android device-integrity / anti-fraud SDK for neo-banks: an Android client libra
 plus a Python decision service. The phone gathers hardware-signed evidence and
 device signals; **the server makes every ALLOW / STEP_UP / BLOCK decision.**
 
-This file is the pick-up point for another agent. Everything below is **built,
-tested and pushed**. Nothing has been run on a physical device yet (deliberate:
+This file is the pick-up point for another agent. Earlier runs below are built, tested and pushed. Run 13 additions are described in
+[docs/RUN_13_NATIVE.md](docs/RUN_13_NATIVE.md); see the latest PR CI for validation. Nothing has been run on a physical device yet (deliberate:
 real-device verification is scheduled after the build runs).
 
 GitHub: `premiumcentraal-boop/Cyclone-scan` (shown as `Cyclone-scan`; clone remote
@@ -124,11 +124,16 @@ default; `fleet_hash_key` policy secret.
 - Never store serial/IMEI/MEID, raw IPs, action params, or secrets.
 - CI workflow: `.github/workflows/ci.yml` (builds both, uploads the scanner APK).
 
+## Run 13 pickup
+
+Next stacked branch: `run-13-native-integrity`, based on `f12704459b0535022b84957ea357f507e266c2d8`.
+Native collector, schema/risk parity, scanner 0.6.0 and regression details: [run notes](docs/RUN_13_NATIVE.md).
+The earlier HEAD and counts in this handoff describe the previous run, not Run 13.
+Physical device remains UNVERIFIED. Confirm-key matching is consistency evidence, not proof of physical co-residency.
+
 ## Remaining roadmap (not built)
 
-- **Native (C/NDK) detection core** — low-level root/hook/debugger/self-integrity
-  checks, cross-checked against the Kotlin results; a native-vs-Kotlin mismatch is
-  itself a factor. A plain-worded spec is in chat history. NOT built here.
+- Native v1 is implemented on the Run 13 branch; real-device validation and broader self-integrity coverage remain.
 - SDK self-protection (obfuscation, encrypted strings, runtime self-integrity).
 - Continuous in-app monitoring with signed events.
 - Scam/malware depth (overlay abuse, known-malicious app lists, accessibility abuse).

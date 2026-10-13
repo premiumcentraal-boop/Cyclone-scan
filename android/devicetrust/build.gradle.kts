@@ -6,12 +6,18 @@ plugins {
 android {
     namespace = "com.devicetrust.client"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         // Android 8+: hardware attestation with attested device IDs. StrongBox (28)
         // and device-property attestation (31) are used when available.
         minSdk = 26
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         consumerProguardFiles("consumer-rules.pro")
+    }
+
+    externalNativeBuild {
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
 
     compileOptions {

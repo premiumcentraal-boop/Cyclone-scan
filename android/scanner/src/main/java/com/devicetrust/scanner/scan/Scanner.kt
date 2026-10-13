@@ -33,7 +33,11 @@ class ScanResult(
     val hardFailures: List<Check> get() = attestation.hardFailures
 
     fun toJson(): JSONObject = JSONObject().apply {
-        put("scanner", "device-trust-scanner/0.5.0")
+        put("scanner", "device-trust-scanner/0.6.0")
+        put("evaluationMode", "LOCAL_DIAGNOSTIC")
+        put("playIntegrityEvaluated", false)
+        put("fleetEvaluated", false)
+        put("officialSignerVerified", false)
         put("scannedAt", scannedAt.time)
         put("verdict", verdict.name)
         put("score", score)

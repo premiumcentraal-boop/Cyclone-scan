@@ -79,7 +79,11 @@ class DeviceSignalsTest {
             "v", "env_a11y_third_party", "env_remote_access_apps", "app_installer", "app_signature_sha256",
             "os_security_patch", "os_release",
         )
-        assertEquals(expected, collect().keySet())
+        val nativeKeys = NativeSignals.CHECKS.flatMap { key ->
+            listOf("native_" + key, "native_" + key + "_status", "native_" + key + "_comparison",
+                "kotlin_" + key + "_comparison_status")
+        }.toSet() + setOf("native_kotlin_mismatch", "native_kotlin_mismatch_status", "native_collector_version")
+        assertEquals(expected + nativeKeys, collect().keySet())
     }
 
     @Test fun suOnPath() = assertTrue(collect { files += "/system/xbin/su" }.getBoolean("root_su"))

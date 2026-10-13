@@ -18,8 +18,14 @@ from __future__ import annotations
 import re
 
 SIGNALS_VERSION = 1
+NATIVE_CHECKS = ['root_su','root_magisk','root_system_rw','hook_frida','hook_xposed','hook_zygisk','debug_traced','selinux_permissive','code_modified']
+NATIVE_BOOL_SIGNALS = frozenset("native_" + key for key in NATIVE_CHECKS) | {"native_kotlin_mismatch"}
+NATIVE_STATUS_SIGNALS = frozenset(key + "_status" for key in NATIVE_BOOL_SIGNALS)
+NATIVE_COMPARISON_SIGNALS = frozenset("native_" + key + "_comparison" for key in NATIVE_CHECKS)
+KOTLIN_COMPARISON_SIGNALS = frozenset("kotlin_" + key + "_comparison_status" for key in NATIVE_CHECKS)
+_NATIVE_STATES = {"DETECTED", "NOT_DETECTED", "UNAVAILABLE", "UNSUPPORTED"}
 
-BOOL_SIGNALS = frozenset({
+BOOL_SIGNALS = NATIVE_BOOL_SIGNALS | frozenset({
     # root
     "root_su", "root_magisk", "root_apps", "root_test_keys", "root_system_rw",
     # hooking / instrumentation
@@ -33,7 +39,8 @@ BOOL_SIGNALS = frozenset({
     "env_remote_access_a11y",
 })
 INT_SIGNALS = frozenset({"env_a11y_third_party"})
-STR_SIGNALS = frozenset({
+STR_SIGNALS = NATIVE_STATUS_SIGNALS | NATIVE_COMPARISON_SIGNALS | KOTLIN_COMPARISON_SIGNALS | frozenset({
+    "native_collector_version",
     "app_installer", "app_signature_sha256",
     # Reported OS facts, cross-checked against the hardware attestation (Run 6):
     # Build.VERSION.SECURITY_PATCH ("2026-09-05") and Build.VERSION.RELEASE ("16").
@@ -81,4 +88,16 @@ def parse_client_signals(raw: object) -> dict:
             ):
                 raise SignalsError(f"{key} must be a short list of identifiers")
             out[key] = sorted(set(value))
+    for key in NATIVE_STATUS_SIGNALS | KOTLIN_COMPARISON_SIGNALS:
+        if key in out and out[key] not in _NATIVE_STATES:
+            raise SignalsError(f"{key} has an invalid state")
+    for key in NATIVE_COMPARISON_SIGNALS:
+        if key in out and out[key] not in {"MATCH", "MISMATCH", "UNAVAILABLE"}:
+            raise SignalsError(f"{key} has an invalid comparison")
+    for key in NATIVE_BOOL_SIGNALS:
+        state = out.get(key + "_status")
+        if out.get(key) is True and state != "DETECTED":
+            raise SignalsError(f"{key} must have DETECTED status")
+        if state == "DETECTED" and out.get(key) is not True:
+            raise SignalsError(f"{key} status contradicts detection")
     return out

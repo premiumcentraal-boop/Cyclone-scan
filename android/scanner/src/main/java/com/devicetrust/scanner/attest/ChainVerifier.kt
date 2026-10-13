@@ -89,7 +89,7 @@ class ChainVerifier(
         checks += Check("validity", "Intermediate certificates in date", if (expired) Check.Status.FAIL else Check.Status.PASS)
 
         if (revokedSerials == null) {
-            checks += Check("revocation", "Not on Google revocation list", Check.Status.WARN, "list unavailable (offline?)")
+            checks += Check("revocation", "Not on Google revocation list", Check.Status.FAIL, "list unavailable: cannot establish revocation safety")
         } else {
             val revoked = certs.any { it.serialNumber.toString(16) in revokedSerials }
             checks += Check(
@@ -156,7 +156,7 @@ class ChainVerifier(
                 "verified_boot", "Verified boot",
                 when (rot.verifiedBootState) {
                     VerifiedBootState.VERIFIED -> Check.Status.PASS
-                    VerifiedBootState.SELF_SIGNED -> Check.Status.WARN
+                    VerifiedBootState.SELF_SIGNED -> Check.Status.FAIL
                     else -> Check.Status.FAIL
                 },
                 when (rot.verifiedBootState) {

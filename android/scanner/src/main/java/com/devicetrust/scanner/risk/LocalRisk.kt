@@ -19,7 +19,18 @@ object LocalRisk {
     const val BLOCK_AT = 80
 
     /** Same values as DEFAULT_WEIGHTS on the server, for the factors computable on-device. */
+    val NATIVE_ALIASES = mapOf(
+        "native_root_su" to "root_su",
+        "native_root_magisk" to "root_magisk",
+        "native_root_system_rw" to "root_system_rw",
+        "native_hook_frida" to "hook_frida",
+        "native_hook_xposed" to "hook_xposed",
+        "native_hook_zygisk" to "hook_zygisk",
+        "native_debug_traced" to "debug_traced"
+    )
+
     val WEIGHTS: Map<String, Int> = mapOf(
+        "native_selinux_permissive" to 20, "native_code_modified" to 60, "native_kotlin_mismatch" to 40,
         "root_su" to 40, "root_magisk" to 50, "root_apps" to 25, "root_test_keys" to 20, "root_system_rw" to 40,
         "hook_frida" to 70, "hook_frida_port" to 50, "hook_xposed" to 60, "hook_zygisk" to 50,
         "debug_attached" to 50, "debug_traced" to 50, "debug_app_debuggable" to 40,
@@ -70,7 +81,13 @@ object LocalRisk {
         if (signals == null) {
             found += "client_signals_missing"
         } else {
-            found += signals.keys().asSequence().filter { signals.opt(it) == true }.sorted()
+            found += signals.keys().asSequence().filter { signals.opt(it) == true && !it.startsWith("native_") }.sorted()
+            NATIVE_ALIASES.forEach { (key, factor) ->
+                if (signals.optBoolean(key) && signals.optString(key + "_status") == "DETECTED") found += factor
+            }
+            listOf("native_selinux_permissive", "native_code_modified", "native_kotlin_mismatch").forEach { factor ->
+                if (signals.optBoolean(factor) && signals.optString(factor + "_status") == "DETECTED") found += factor
+            }
             if (signals.optInt("env_a11y_third_party", 0) > 0) found += "env_a11y_third_party"
             if ((signals.optJSONArray("env_remote_access_apps")?.length() ?: 0) > 0) found += "env_remote_access_apps"
             if (signals.has("app_installer")) {
@@ -157,6 +174,9 @@ object LocalRisk {
 
     /** Plain-language explanation for each factor, shown in the app. */
     val DESCRIPTIONS: Map<String, String> = mapOf(
+        "native_selinux_permissive" to "SELinux enforcement disabled (native)",
+        "native_code_modified" to "SDK code changed since library load",
+        "native_kotlin_mismatch" to "Native and Kotlin equivalent observations disagree",
         "root_su" to "su binary found",
         "root_magisk" to "Magisk / KernelSU / APatch traces",
         "root_apps" to "Root manager app installed",

@@ -16,7 +16,7 @@ fun interface SignalCollector {
  * Only booleans, counts and short identifiers are reported: no file
  * contents, no installed-app inventory beyond the fixed lists below.
  */
-class DeviceSignals(private val probe: SignalProbe) : SignalCollector {
+class DeviceSignals(private val probe: SignalProbe, private val nativeProbe: NativeProbe = JniNativeProbe) : SignalCollector {
 
     override fun collect(): JSONObject {
         val maps = safe { probe.readText("/proc/self/maps") }.orEmpty()
@@ -62,7 +62,7 @@ class DeviceSignals(private val probe: SignalProbe) : SignalCollector {
             put("env_a11y_third_party", a11y.filterNot { it.isSystemApp }.map { it.packageName }.distinct().size)
             put("env_remote_access_a11y", a11y.any { s -> REMOTE_ACCESS_APPS.values.any { s.packageName in it } })
             put("env_remote_access_apps", JSONArray(remoteApps))
-        }
+        }.also { NativeSignals.enrich(it, probe, nativeProbe) }
     }
 
     private fun suPresent(): Boolean {
