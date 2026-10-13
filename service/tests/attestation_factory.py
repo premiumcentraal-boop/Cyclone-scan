@@ -96,6 +96,10 @@ class KD:
     boot_state: int = 0
     boot_key: bytes = BOOT_KEY
     origin: int = 0
+    # Key-use auth: default is a plain device key (no user auth needed).
+    no_auth_required: bool = True
+    user_auth_type: int | None = None
+    auth_timeout: int | None = None
     os_version: int = 160000
     os_patch_level: int = 202609
     vendor_patch_level: int | None = 20260905
@@ -123,6 +127,12 @@ class KD:
             (705, integer(self.os_version)),
             (706, integer(self.os_patch_level)),
         ]
+        if self.no_auth_required:
+            hw.append((503, tlv(0x05, b"")))
+        if self.user_auth_type is not None:
+            hw.append((504, integer(self.user_auth_type)))
+        if self.auth_timeout is not None:
+            hw.append((505, integer(self.auth_timeout)))
         if self.include_root_of_trust:
             hw.append((704, seq(octets(self.boot_key), boolean(self.device_locked),
                                 enumerated(self.boot_state), octets(b"\x11" * 32))))

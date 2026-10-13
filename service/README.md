@@ -1,4 +1,4 @@
-# Device Trust Service — Phase 1
+# Device Trust Service
 
 Server-side verification that an Android device is genuine, unmodified and
 running your real app, before it is allowed to enroll for banking.
@@ -7,9 +7,13 @@ running your real app, before it is allowed to enroll for banking.
 be hooked; hardware-signed evidence cannot be forged without a leaked key,
 and leaked keys are on Google's revocation list, which this service enforces.
 
-Phase 1 = enrollment with **hard-fail gates** (ALLOW / BLOCK). Device binding
-for per-action signatures (Phase 2), client RASP signals and risk scoring
-(Phase 3) and policy tuning (Phase 4) build on this.
+* **Phase 1 — enrollment** with hard-fail gates (ALLOW / BLOCK).
+* **Phase 2 — device binding**: every sensitive action is signed by the
+  enrolled hardware key (ALLOW / STEP_UP / BLOCK); high-risk actions need a
+  biometric-bound confirm key.
+
+Client RASP signals and risk scoring (Phase 3) and policy tuning (Phase 4)
+build on this.
 
 ## What is verified
 
@@ -53,6 +57,69 @@ unless `--expose-reasons` is set (development only); operators find them in the
 
 Put this service behind your backend/API gateway so only authenticated app
 sessions reach it.
+
+## Phase 2: device binding and signed actions
+
+At enrollment the app may send a second attestation chain, `confirmKeyChain`,
+for a **confirm key**. The server only accepts it when the secure hardware
+attests that the key:
+
+* needs user authentication (`noAuthRequired` absent),
+* accepts only a strong biometric (`userAuthType` = biometric; PIN/pattern
+  only if `confirm_key_allow_device_credential`),
+* needs a fresh authentication for every signature (`authTimeout` absent or 0),
+* lives in the same hardware as the device key (same verified-boot key and
+  attested IDs) and is a different key.
+
+A bad confirm chain blocks the whole enrollment (`CONFIRM_KEY_INVALID`,
+`CONFIRM_KEY_NOT_USER_AUTH_BOUND`); devices without strong biometrics simply
+enroll without one.
+
+### Signing an action
+
+```
+app                                   backend / trust service
+ │ POST /v1/action-challenges {deviceId} ─▶  {challengeId, nonce, expiresAt}   (bound to that device)
+ │ signedData = UTF-8 JSON:
+ │   {"v":1,"deviceId","challengeId","nonce","ts":<ms>,
+ │    "action":{"type":"payment","params":{...}}}
+ │ signature = ECDSA-P256-SHA256(signedData) with the device key,
+ │             or the confirm key after BiometricPrompt
+ │ playIntegrityToken? with requestHash = b64url(SHA-256("device-trust/action/v1" ‖ signedData))
+ │ POST /v1/actions/verify {deviceId, challengeId, signedData(b64), signature(b64),
+ │                          key:"device"|"confirm", playIntegrityToken?}
+ │ ◀── {decision: ALLOW|STEP_UP|BLOCK, decisionId, action?: {type, params}}
+```
+
+The server parses the exact signed bytes (no canonicalization; duplicate JSON
+keys are rejected), checks they name this device, this challenge and its
+nonce, that `ts` is fresh, and verifies the signature with the stored key.
+**On ALLOW it returns the signed action; the backend must execute that
+action, not whatever else arrived with the request.**
+
+| Outcome | When |
+|---|---|
+| ALLOW | signature valid, bound, fresh, type allowed, Play Integrity OK if required |
+| STEP_UP | only problem: the policy requires the confirm key for this action type (`CONFIRM_KEY_REQUIRED`) — ask for out-of-band verification |
+| BLOCK | `DEVICE_UNKNOWN`, `DEVICE_REVOKED`, `CHALLENGE_UNKNOWN`, `SIGNED_DATA_MALFORMED`, `SIGNED_DATA_MISMATCH`, `ACTION_STALE`, `SIGNATURE_INVALID`, `ACTION_TYPE_NOT_ALLOWED`, `PLAY_INTEGRITY_*` |
+
+Action params are never logged (they may contain account data); the action
+type, key kind and reason codes are.
+
+Policy keys: `allowed_action_types`, `confirm_key_required_actions`,
+`play_integrity_required_actions`, `action_challenge_ttl_seconds`,
+`action_max_age_seconds`, `confirm_key_allow_device_credential`
+(see `policy.example.json`).
+
+### Revoking a device
+
+* CLI: `device-trust revoke --db devices.sqlite --device-id dev_... --reason "lost phone"`
+* API (only when started with `--admin-token-file`, a file holding a ≥32-char token):
+  `POST /v1/admin/devices/{deviceId}/revoke` with `Authorization: Bearer <token>`.
+  Without the flag the endpoint does not exist.
+
+Revoked devices get no new action challenges and every pending action is
+blocked. Phase 1 databases are migrated in place on startup.
 
 ## Run
 
@@ -103,4 +170,6 @@ handled by key attestation only.
   Pixel, Samsung, an unlocked/rooted phone, an emulator) before relying on it.
 * A device with a leaked-but-not-yet-revoked keybox can pass key attestation;
   `MEETS_STRONG_INTEGRITY` and later per-action re-attestation narrow that window.
-* Phase 1 has no risk score: all checks are hard gates.
+* There is no risk score yet (Phase 3): all checks are hard gates.
+* An enrolled key cannot be re-attested; to refresh attestation evidence
+  (e.g. after an OS update) the app re-enrolls.

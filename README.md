@@ -16,7 +16,7 @@ run only inside the app.
 ## Roadmap
 
 1. **Phase 1 (done):** enrollment with hard-fail gates.
-2. **Phase 2:** device binding: sensitive actions signed with the enrolled hardware key.
+2. **Phase 2 (done):** device binding: sensitive actions signed with the enrolled hardware key; biometric-bound confirm key for high-risk actions; device revocation.
 3. **Phase 3:** client RASP signals and a server-side risk score.
 4. **Phase 4:** policy tuning, dashboards, red-team test matrix, fallbacks.
 

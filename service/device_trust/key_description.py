@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum
 
-from .der import CLASS_CONTEXT, TAG_SEQUENCE, TAG_SET, DerError, Tlv, read_single
+from .der import CLASS_CONTEXT, TAG_NULL, TAG_SEQUENCE, TAG_SET, DerError, Tlv, read_single
 
 KEY_DESCRIPTION_OID = "1.3.6.1.4.1.11129.2.1.17"
 
@@ -41,6 +41,9 @@ class KeyOrigin(IntEnum):
 # AuthorizationList context tags (KeyMint Tag numbers masked to the low bits).
 TAG_PURPOSE = 1
 TAG_ALGORITHM = 2
+TAG_NO_AUTH_REQUIRED = 503
+TAG_USER_AUTH_TYPE = 504
+TAG_AUTH_TIMEOUT = 505
 TAG_ORIGIN = 702
 TAG_ROOT_OF_TRUST = 704
 TAG_OS_VERSION = 705
@@ -63,6 +66,11 @@ _ID_TAGS = {
 }
 
 
+# HardwareAuthenticatorType bits (userAuthType).
+AUTH_PASSWORD = 1
+AUTH_BIOMETRIC = 2
+
+
 @dataclass(frozen=True)
 class RootOfTrust:
     verified_boot_key: bytes
@@ -82,6 +90,9 @@ class AuthorizationList:
     purposes: frozenset[int] = frozenset()
     algorithm: int | None = None
     origin: KeyOrigin | None = None
+    no_auth_required: bool = False
+    user_auth_type: int | None = None
+    auth_timeout: int | None = None
     root_of_trust: RootOfTrust | None = None
     os_version: int | None = None
     os_patch_level: int | None = None
@@ -163,6 +174,15 @@ def _parse_authorization_list(tlv: Tlv) -> AuthorizationList:
             values["purposes"] = frozenset(p.as_int() for p in inner.children())
         elif tag == TAG_ALGORITHM:
             values["algorithm"] = _explicit_inner(item).as_int()
+        elif tag == TAG_NO_AUTH_REQUIRED:
+            inner = _explicit_inner(item)
+            if not inner.is_universal(TAG_NULL) or inner.value:
+                raise DerError("noAuthRequired must be NULL")
+            values["no_auth_required"] = True
+        elif tag == TAG_USER_AUTH_TYPE:
+            values["user_auth_type"] = _explicit_inner(item).as_int()
+        elif tag == TAG_AUTH_TIMEOUT:
+            values["auth_timeout"] = _explicit_inner(item).as_int()
         elif tag == TAG_ORIGIN:
             values["origin"] = _enum(KeyOrigin, _explicit_inner(item).as_int())
         elif tag == TAG_ROOT_OF_TRUST:

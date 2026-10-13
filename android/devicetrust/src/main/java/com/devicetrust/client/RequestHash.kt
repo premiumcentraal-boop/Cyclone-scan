@@ -9,13 +9,17 @@ import java.util.Base64
  */
 object RequestHash {
     private val ENROLL_DOMAIN = "device-trust/enroll/v1".toByteArray(Charsets.US_ASCII)
+    private val ACTION_DOMAIN = "device-trust/action/v1".toByteArray(Charsets.US_ASCII)
 
     /** base64url(SHA-256("device-trust/enroll/v1" || nonce || attested key SPKI DER)), unpadded. */
-    fun enrollment(nonce: ByteArray, publicKeySpki: ByteArray): String {
+    fun enrollment(nonce: ByteArray, publicKeySpki: ByteArray): String = hash(ENROLL_DOMAIN, nonce, publicKeySpki)
+
+    /** base64url(SHA-256("device-trust/action/v1" || signedData)), unpadded. Matches `action_request_hash`. */
+    fun action(signedData: ByteArray): String = hash(ACTION_DOMAIN, signedData)
+
+    private fun hash(vararg parts: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").run {
-            update(ENROLL_DOMAIN)
-            update(nonce)
-            update(publicKeySpki)
+            parts.forEach { update(it) }
             digest()
         }
         return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)

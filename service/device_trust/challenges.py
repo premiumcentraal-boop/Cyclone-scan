@@ -20,6 +20,9 @@ class Challenge:
     challenge_id: str
     nonce: bytes
     expires_at: float
+    # None for enrollment challenges; the device ID for action challenges, so a
+    # nonce issued to one device (or for enrollment) cannot be used elsewhere.
+    bound_to: str | None = None
 
 
 class ChallengeCapacityExceeded(RuntimeError):
@@ -39,9 +42,10 @@ class ChallengeStore:
         for k in expired:
             del self._items[k]
 
-    def issue(self) -> Challenge:
+    def issue(self, bound_to: str | None = None, ttl_seconds: int | None = None) -> Challenge:
         now = self._clock()
-        challenge = Challenge(secrets.token_urlsafe(24), secrets.token_bytes(NONCE_BYTES), now + self._ttl)
+        ttl = self._ttl if ttl_seconds is None else ttl_seconds
+        challenge = Challenge(secrets.token_urlsafe(24), secrets.token_bytes(NONCE_BYTES), now + ttl, bound_to)
         with self._lock:
             if len(self._items) >= self._max:
                 self._purge(now)
@@ -50,10 +54,14 @@ class ChallengeStore:
             self._items[challenge.challenge_id] = challenge
         return challenge
 
-    def consume(self, challenge_id: str) -> bytes | None:
-        """Return the nonce once; unknown, reused or expired IDs return None."""
+    def consume(self, challenge_id: str, bound_to: str | None = None) -> bytes | None:
+        """Return the nonce once; unknown, reused, expired or mis-bound IDs return None.
+
+        A challenge is removed on any lookup, even a mis-bound one, so it can
+        never be retried.
+        """
         with self._lock:
             challenge = self._items.pop(challenge_id, None)
-        if challenge is None or challenge.expires_at <= self._clock():
+        if challenge is None or challenge.expires_at <= self._clock() or challenge.bound_to != bound_to:
             return None
         return challenge.nonce
