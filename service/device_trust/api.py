@@ -50,6 +50,24 @@ class EnrollmentBody(_Model):
     play_integrity_token: str | None = Field(default=None, alias="playIntegrityToken", max_length=MAX_TOKEN_CHARS)
     device: ReportedDevice = Field(default_factory=ReportedDevice)
     confirm_key_chain: list[str] | None = Field(default=None, alias="confirmKeyChain", min_length=1, max_length=10)
+    # Client signal report (signals.py); validated by the service.
+    signals: dict | None = None
+
+
+class RiskFactorOut(_Model):
+    factor: str
+    points: int
+
+
+class RiskOut(_Model):
+    score: int
+    factors: list[RiskFactorOut]
+
+
+def _risk_out(risk) -> RiskOut | None:
+    if risk is None:
+        return None
+    return RiskOut(score=risk.score, factors=[RiskFactorOut(factor=f, points=p) for f, p in risk.factors])
 
 
 class EnrollmentResponse(_Model):
@@ -58,6 +76,7 @@ class EnrollmentResponse(_Model):
     device_id: str | None = Field(default=None, alias="deviceId")
     reasons: list[str] | None = None
     warnings: list[str] | None = None
+    risk: RiskOut | None = None
 
 
 class ActionChallengeBody(_Model):
@@ -84,6 +103,7 @@ class ActionResponse(_Model):
     action: SignedActionOut | None = None
     reasons: list[str] | None = None
     warnings: list[str] | None = None
+    risk: RiskOut | None = None
 
 
 class RevokeBody(_Model):
@@ -118,7 +138,7 @@ def _decode_chain(items: list[str]) -> list[bytes]:
 
 def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, admin_token: str | None = None) -> FastAPI:
     """Build the API. ``admin_token`` enables the revoke endpoint; without it the endpoint is absent."""
-    app = FastAPI(title="Device Trust Service", version="0.2.0")
+    app = FastAPI(title="Device Trust Service", version="0.3.0")
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -142,6 +162,7 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
             reported_ids={k: reported[k] for k in ID_FIELDS if reported[k]},
             play_integrity_token=body.play_integrity_token,
             confirm_key_chain=_decode_chain(body.confirm_key_chain) if body.confirm_key_chain else None,
+            client_signals=body.signals,
         )
         result = service.enroll(req)
         return EnrollmentResponse(
@@ -150,6 +171,7 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
             deviceId=result.device_id,
             reasons=list(result.reasons) if expose_reasons else None,
             warnings=list(result.warnings) if expose_reasons else None,
+            risk=_risk_out(result.risk) if expose_reasons else None,
         )
 
     @app.post("/v1/action-challenges", status_code=201, response_model=ChallengeResponse,
@@ -186,14 +208,27 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
             action=SignedActionOut(type=result.action_type, params=result.params) if result.action_type else None,
             reasons=list(result.reasons) if expose_reasons else None,
             warnings=list(result.warnings) if expose_reasons else None,
+            risk=_risk_out(result.risk) if expose_reasons else None,
         )
 
     if admin_token:
-        @app.post("/v1/admin/devices/{device_id}/revoke", status_code=204)
-        def revoke(device_id: str, body: RevokeBody, authorization: str = Header(default="")) -> None:
+        def _require_admin(authorization: str) -> None:
             expected = f"Bearer {admin_token}"
             if not hmac.compare_digest(authorization.encode(), expected.encode()):
                 raise HTTPException(status_code=401, detail="unauthorized")
+
+        @app.get("/v1/admin/devices/{device_id}")
+        def device_detail(device_id: str, limit: int = 50, authorization: str = Header(default="")) -> dict:
+            """Fraud-team view: device status, attested facts and recent decisions with risk factors."""
+            _require_admin(authorization)
+            detail = service.device_detail(device_id, limit=max(1, min(limit, 500)))
+            if detail is None:
+                raise HTTPException(status_code=404, detail="device not found")
+            return detail
+
+        @app.post("/v1/admin/devices/{device_id}/revoke", status_code=204)
+        def revoke(device_id: str, body: RevokeBody, authorization: str = Header(default="")) -> None:
+            _require_admin(authorization)
             if not service.revoke_device(device_id, body.reason):
                 raise HTTPException(status_code=404, detail="device not found")
 

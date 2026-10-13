@@ -45,6 +45,7 @@ object TrustJson {
         request.confirmKeyChain?.let { chain ->
             put("confirmKeyChain", JSONArray(chain.map { b64.encodeToString(it) }))
         }
+        request.signals?.let { put("signals", it) }
         put(
             "device",
             JSONObject().apply {
@@ -70,6 +71,7 @@ object TrustJson {
         type: String,
         params: JSONObject,
         timestampMillis: Long,
+        signals: JSONObject? = null,
     ): ByteArray = JSONObject().apply {
         put("v", 1)
         put("deviceId", deviceId)
@@ -77,6 +79,8 @@ object TrustJson {
         put("nonce", Base64.getUrlEncoder().withoutPadding().encodeToString(challenge.nonce))
         put("ts", timestampMillis)
         put("action", JSONObject().put("type", type).put("params", params))
+        // Signed together with the action, so nothing between app and server can strip it.
+        signals?.let { put("signals", it) }
     }.toString().toByteArray(Charsets.UTF_8)
 
     fun encodeAction(action: SignedAction): String = JSONObject().apply {
@@ -109,6 +113,7 @@ object TrustJson {
         val json = JSONObject(body)
         val decision = when (val raw = json.getString("decision")) {
             "ALLOW" -> Decision.ALLOW
+            "STEP_UP" -> Decision.STEP_UP
             "BLOCK" -> Decision.BLOCK
             else -> throw DeviceTrustException("unknown decision '$raw'")
         }

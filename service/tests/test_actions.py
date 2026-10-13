@@ -66,12 +66,15 @@ class Env:
         )
         self.client = TestClient(create_app(self.service, expose_reasons=True, admin_token=ADMIN))
 
-    def enroll(self, *, confirm: dict | None = None, confirm_pki=None, confirm_ids=None, reuse_key=False):
+    def enroll(self, *, confirm: dict | None = None, confirm_pki=None, confirm_ids=None, reuse_key=False,
+               signals: dict | None = None):
         ch = self.client.post("/v1/challenges").json()
         nonce = b64url_decode(ch["nonce"])
         leaf, key = make_leaf(self.pki, KD(challenge=nonce))
         body = {"challengeId": ch["challengeId"], "device": DEVICE_IDS,
                 "attestationChain": [base64.b64encode(c).decode() for c in chain_der(leaf, self.pki.inter, self.pki.root)]}
+        if signals is not None:
+            body["signals"] = signals
         confirm_key = None
         if confirm is not None:
             pki = confirm_pki or self.pki

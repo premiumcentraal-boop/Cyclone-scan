@@ -1,6 +1,9 @@
 package com.devicetrust.client
 
 import android.content.Context
+import com.devicetrust.client.signals.AndroidSignalProbe
+import com.devicetrust.client.signals.DeviceSignals
+import com.devicetrust.client.signals.SignalCollector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -66,13 +69,20 @@ class DeviceTrustClient(
     private val deviceInfo: () -> DeviceInfo = DeviceInfo::current,
     private val newAlias: () -> String = { "device_trust_" + UUID.randomUUID() },
     private val clockMillis: () -> Long = System::currentTimeMillis,
+    /** Client RASP signal collector (Phase 3); null sends no report. */
+    private val signals: SignalCollector? = null,
 ) {
     constructor(context: Context, api: TrustApi, cloudProjectNumber: Long?) : this(
         api = api,
         attester = AndroidKeyAttester(context),
         integrity = cloudProjectNumber?.let { PlayIntegrityTokenSource(context, it) },
         store = SharedPreferencesEnrollmentStore(context),
+        signals = DeviceSignals(AndroidSignalProbe(context)),
     )
+
+    private suspend fun collectSignals() = signals?.let { c ->
+        withContext(Dispatchers.IO) { runCatching { c.collect() }.getOrNull() }
+    }
 
     fun currentEnrollment(): Enrollment? = store.load()
 
@@ -103,9 +113,11 @@ class DeviceTrustClient(
                     playIntegrityToken = token,
                     device = deviceInfo(),
                     confirmKeyChain = confirm?.chain,
+                    signals = collectSignals(),
                 ),
             )
-            if (result.decision == Decision.ALLOW && result.deviceId != null) {
+            // STEP_UP enrollments are registered server-side too; the bank decides what to unlock.
+            if (result.decision != Decision.BLOCK && result.deviceId != null) {
                 val previous = store.load()
                 store.save(Enrollment(result.deviceId, alias, confirm?.alias))
                 keep = true
@@ -147,7 +159,9 @@ class DeviceTrustClient(
             SigningKey.DEVICE -> enrollment.keyAlias
         }
         val challenge = api.createActionChallenge(enrollment.deviceId)
-        val signedData = TrustJson.signedActionData(enrollment.deviceId, challenge, type, params, clockMillis())
+        val signedData = TrustJson.signedActionData(
+            enrollment.deviceId, challenge, type, params, clockMillis(), collectSignals(),
+        )
 
         var signer = withContext(Dispatchers.Default) { attester.signer(alias) }
         if (authenticator != null) signer = authenticator.authenticate(signer)

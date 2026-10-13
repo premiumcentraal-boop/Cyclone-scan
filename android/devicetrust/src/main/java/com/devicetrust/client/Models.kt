@@ -1,6 +1,7 @@
 package com.devicetrust.client
 
 import android.os.Build
+import org.json.JSONObject
 
 /** A single-use server challenge. [nonce] goes into the key attestation certificate. */
 class Challenge(
@@ -40,9 +41,15 @@ class EnrollmentRequest(
     val device: DeviceInfo,
     /** Optional biometric-bound key chain (same challenge), leaf first. */
     val confirmKeyChain: List<ByteArray>? = null,
+    /** Optional client signal report (Phase 3). */
+    val signals: JSONObject? = null,
 )
 
-enum class Decision { ALLOW, BLOCK }
+/**
+ * ALLOW: enrolled. STEP_UP: enrolled, but the server saw risk; the bank should
+ * verify the customer (e.g. video ID) before trusting this device. BLOCK: not enrolled.
+ */
+enum class Decision { ALLOW, STEP_UP, BLOCK }
 
 /**
  * Server verdict. Failure reasons are intentionally not returned to the app in

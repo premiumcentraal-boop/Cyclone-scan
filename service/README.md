@@ -12,8 +12,10 @@ and leaked keys are on Google's revocation list, which this service enforces.
   enrolled hardware key (ALLOW / STEP_UP / BLOCK); high-risk actions need a
   biometric-bound confirm key.
 
-Client RASP signals and risk scoring (Phase 3) and policy tuning (Phase 4)
-build on this.
+* **Phase 3 — risk scoring**: client RASP signals, fresh Play Integrity
+  signals, hardware evidence and history add up to an explainable score.
+
+Policy tuning, dashboards and the red-team matrix (Phase 4) build on this.
 
 ## What is verified
 
@@ -111,6 +113,43 @@ Policy keys: `allowed_action_types`, `confirm_key_required_actions`,
 `action_max_age_seconds`, `confirm_key_allow_device_credential`
 (see `policy.example.json`).
 
+## Phase 3: client signals and risk scoring
+
+Hard gates still decide on their own (a bad signature or an unlocked
+bootloader is BLOCK whatever the score). On top of them, every enrollment and
+action gets a **risk score** from 0 to 100: each observed factor adds points
+from a weight table, and per-action thresholds map the total to
+ALLOW / STEP_UP (`RISK_STEP_UP`) / BLOCK (`RISK_BLOCK`).
+
+**Inputs**
+
+| Source | Factors (default points) |
+|---|---|
+| Client signals (`signals` object, see `signals.py`) | root: `root_su` 40, `root_magisk` 50, `root_apps` 25, `root_test_keys` 20, `root_system_rw` 40 · hooking: `hook_frida` 70, `hook_frida_port` 50, `hook_xposed` 60, `hook_zygisk` 50 · debugging: `debug_attached` 50, `debug_traced` 50, `debug_app_debuggable` 40 · emulator: `emu_build` 60, `emu_files` 60 · app: `app_installer_untrusted` 30, `app_signature_mismatch` 80 · scam/remote-control: `env_in_call` 25, `env_external_display` 30, `env_remote_access_apps` 15, `env_remote_access_a11y` 45, `env_a11y_third_party` 10 · `env_adb` 10, `env_dev_options` 5, `env_vpn` 5 · `client_signals_missing` 20 |
+| Fresh Play Integrity token | `play_no_strong_integrity` 10, `play_capturing_apps` 25, `play_controlling_apps` 45, `play_overlay_apps` 15, `play_protect_*_risk` 10/25/50, `play_activity_level_3/4` 20/40, `play_unlicensed` 30 |
+| Hardware evidence | `os_patch_stale` 10, `no_strongbox` 0 (informational) |
+| History | `device_new` 10 (enrolled < 24 h), `velocity_high` 30 (≥ 30 actions/hour) |
+
+Default thresholds: actions allow below 50 and block at 80; enrollment allows below 60 and
+blocks at 90. Tune per action type under `risk.action_thresholds` (the example
+policy makes `payment` and `add_payee` stricter) and override any weight under
+`risk.weights`; unknown factor names are rejected so typos cannot silently
+disable a check.
+
+In signed actions the signal report sits **inside the signed bytes**, so a
+proxy cannot strip or edit it. Code on a compromised phone can still lie,
+which is why signals only add risk and never prove safety.
+
+A STEP_UP **enrollment** is registered (the bank verifies the customer
+out-of-band); a BLOCK enrollment is not.
+
+**Audit trail.** Every decision is stored (`decisions` table) with its score,
+factors and reason codes, never action params or raw signal reports. The
+admin endpoint `GET /v1/admin/devices/{deviceId}` (admin token required)
+returns status, attested facts and recent decisions for the fraud team.
+With `--expose-reasons`, API responses also carry
+`risk: {score, factors:[{factor, points}]}`.
+
 ### Revoking a device
 
 * CLI: `device-trust revoke --db devices.sqlite --device-id dev_... --reason "lost phone"`
@@ -170,6 +209,7 @@ handled by key attestation only.
   Pixel, Samsung, an unlocked/rooted phone, an emulator) before relying on it.
 * A device with a leaked-but-not-yet-revoked keybox can pass key attestation;
   `MEETS_STRONG_INTEGRITY` and later per-action re-attestation narrow that window.
-* There is no risk score yet (Phase 3): all checks are hard gates.
+* Default risk weights are expert estimates, not yet calibrated on real
+  traffic; tune them with data from a pilot before relying on STEP_UP rates.
 * An enrolled key cannot be re-attested; to refresh attestation evidence
   (e.g. after an OS update) the app re-enrolls.

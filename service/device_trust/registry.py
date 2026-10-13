@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS devices (
     evidence_json    TEXT NOT NULL,
     play_signals_json TEXT
 );
+CREATE TABLE IF NOT EXISTS decisions (
+    decision_id   TEXT PRIMARY KEY,
+    device_id     TEXT,
+    kind          TEXT NOT NULL,           -- 'enrollment' | 'action'
+    action_type   TEXT,
+    decision      TEXT NOT NULL,
+    risk_score    INTEGER,
+    factors_json  TEXT NOT NULL,
+    reasons_json  TEXT NOT NULL,
+    created_at    REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS decisions_device_time ON decisions (device_id, created_at);
 """
 
 # Columns added after Phase 1; applied in place to existing databases.
@@ -139,6 +151,45 @@ class DeviceRegistry:
             self._conn.execute(
                 "UPDATE devices SET last_action_at = ? WHERE device_id = ?", (int(self._clock()), device_id)
             )
+
+    def record_decision(
+        self,
+        decision_id: str,
+        device_id: str | None,
+        kind: str,
+        action_type: str | None,
+        decision: str,
+        risk_score: int | None,
+        factors: list[tuple[str, int]],
+        reasons: list[str],
+    ) -> None:
+        """Audit trail of every decision (no action params, no raw signals)."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (decision_id, device_id, kind, action_type, decision, risk_score,
+                 json.dumps(factors), json.dumps(reasons), self._clock()),
+            )
+
+    def count_recent_actions(self, device_id: str, window_seconds: float) -> int:
+        with self._lock:
+            return self._conn.execute(
+                "SELECT COUNT(*) FROM decisions WHERE device_id = ? AND kind = 'action' AND created_at >= ?",
+                (device_id, self._clock() - window_seconds),
+            ).fetchone()[0]
+
+    def decisions_for(self, device_id: str, limit: int = 50) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT decision_id, kind, action_type, decision, risk_score, factors_json, reasons_json, created_at"
+                " FROM decisions WHERE device_id = ? ORDER BY created_at DESC LIMIT ?",
+                (device_id, limit),
+            ).fetchall()
+        return [
+            {"decision_id": r[0], "kind": r[1], "action_type": r[2], "decision": r[3], "risk_score": r[4],
+             "factors": [tuple(f) for f in json.loads(r[5])], "reasons": json.loads(r[6]), "created_at": r[7]}
+            for r in rows
+        ]
 
     def count(self) -> int:
         with self._lock:
