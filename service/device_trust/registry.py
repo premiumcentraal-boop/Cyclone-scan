@@ -51,6 +51,18 @@ CREATE TABLE IF NOT EXISTS attestation_key_uses (
     created_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS attestation_key_uses_key_time ON attestation_key_uses (key_sha256, created_at);
+-- Fleet events (Run 12): network block (keyed hash, never the IP) and cohort
+-- of every enrollment attempt and action, for burst detection.
+CREATE TABLE IF NOT EXISTS fleet_events (
+    kind        TEXT NOT NULL,          -- 'enrollment' | 'action'
+    decision_id TEXT NOT NULL,
+    device_id   TEXT,
+    network     TEXT,
+    cohort      TEXT,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fleet_events_network ON fleet_events (network, kind, created_at);
+CREATE INDEX IF NOT EXISTS fleet_events_cohort ON fleet_events (cohort, kind, created_at);
 """
 
 # Columns added after Phase 1; applied in place to existing databases.
@@ -220,6 +232,63 @@ class DeviceRegistry:
                 (key_sha256,),
             )]
         return {"enrollments": enrollments, "models": sorted(models)}
+
+    def record_fleet_event(self, kind: str, decision_id: str, device_id: str | None,
+                           network: str | None, cohort: str | None) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO fleet_events VALUES (?, ?, ?, ?, ?, ?)",
+                (kind, decision_id, device_id, network, cohort, self._clock()),
+            )
+
+    def fleet_counts(self, network: str | None, cohort: str | None, window_seconds: float) -> dict:
+        """Recent activity around one request's network block and cohort."""
+        since = self._clock() - window_seconds
+        out = {"network_enrollments": 0, "network_devices": 0, "cohort_enrollments": 0}
+        with self._lock:
+            if network:
+                out["network_enrollments"] = self._conn.execute(
+                    "SELECT COUNT(*) FROM fleet_events WHERE network = ? AND kind = 'enrollment' AND created_at >= ?",
+                    (network, since),
+                ).fetchone()[0]
+                out["network_devices"] = self._conn.execute(
+                    "SELECT COUNT(DISTINCT device_id) FROM fleet_events"
+                    " WHERE network = ? AND kind = 'action' AND device_id IS NOT NULL AND created_at >= ?",
+                    (network, since),
+                ).fetchone()[0]
+            if cohort:
+                out["cohort_enrollments"] = self._conn.execute(
+                    "SELECT COUNT(*) FROM fleet_events WHERE cohort = ? AND kind = 'enrollment' AND created_at >= ?",
+                    (cohort, since),
+                ).fetchone()[0]
+        return out
+
+    def fleet_summary(self, window_seconds: float, limit: int = 10) -> dict:
+        """Busiest network blocks, cohorts and attestation keys in the window."""
+        since = self._clock() - window_seconds
+        with self._lock:
+            networks = self._conn.execute(
+                "SELECT network, SUM(kind = 'enrollment'), COUNT(DISTINCT device_id) FROM fleet_events"
+                " WHERE network IS NOT NULL AND created_at >= ? GROUP BY network"
+                " ORDER BY 2 DESC, 3 DESC LIMIT ?",
+                (since, limit),
+            ).fetchall()
+            cohorts = self._conn.execute(
+                "SELECT cohort, COUNT(*) FROM fleet_events WHERE kind = 'enrollment' AND cohort IS NOT NULL"
+                " AND created_at >= ? GROUP BY cohort ORDER BY 2 DESC LIMIT ?",
+                (since, limit),
+            ).fetchall()
+            keys = self._conn.execute(
+                "SELECT key_sha256, COUNT(*), COUNT(DISTINCT model) FROM attestation_key_uses WHERE created_at >= ?"
+                " GROUP BY key_sha256 ORDER BY 3 DESC, 2 DESC LIMIT ?",
+                (since, limit),
+            ).fetchall()
+        return {
+            "windowSeconds": window_seconds,
+            "networks": [{"network": n, "enrollments": e, "devices": d} for n, e, d in networks],
+            "cohorts": [{"cohort": c, "enrollments": e} for c, e in cohorts],
+            "attestationKeys": [{"key": k[:16], "enrollments": e, "models": m} for k, e, m in keys],
+        }
 
     def count(self) -> int:
         with self._lock:

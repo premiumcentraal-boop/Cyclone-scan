@@ -188,6 +188,37 @@ phones that only have factory keys.
 Every enrollment attempt (including blocked ones) records its attestation-key
 hash and claimed model in `attestation_key_uses`.
 
+## Run 12: fleet intelligence
+
+Device farms and mule networks look normal one device at a time; they stand
+out across the fleet. Every enrollment attempt (including failed ones) and
+every action records a **keyed hash of the caller's network block** (/24 IPv4,
+/48 IPv6; the address itself is never stored) and, for enrollments, a
+**cohort**: attested model + patch level + key provenance.
+
+| Factor | Points | Fires when (defaults, per `risk.fleet_window_seconds` = 1 h) |
+|---|---|---|
+| `fleet_network_burst` | 40 | ≥ 10 enrollment attempts from one network block |
+| `fleet_cohort_burst` | 25 | ≥ 25 enrollments of one model/patch/key-type cohort |
+| `fleet_network_many_devices` | 30 | ≥ 20 distinct enrolled devices acting from one network block |
+| `fleet_device_recall_flagged` | 80 | A Play Integrity **device recall** bit in `risk.device_recall_fraud_bits` is set |
+
+**Device recall** is Play Integrity's free per-device storage that survives app
+reinstalls: when your fraud team confirms a device as fraudulent, write
+`bitFirst` (or the bit you configure) for it via the Play Integrity API; every
+later request from that phone then carries it, even after a reinstall.
+
+Set `fleet_hash_key` in the policy (a long random secret) so hashes are
+stable across restarts. Behind a proxy, start with `--trust-forwarded-for` so
+the client IP comes from `X-Forwarded-For`; never enable it when the service
+is reachable directly, or callers can forge their network.
+
+`GET /v1/admin/fleet?hours=24` (admin token) lists the busiest network blocks,
+cohorts and attestation keys for the fraud team.
+
+Thresholds are starting points: tune them to your traffic, since a large
+office or mobile carrier NAT legitimately puts many customers behind one block.
+
 ### Revoking a device
 
 * CLI: `device-trust revoke --db devices.sqlite --device-id dev_... --reason "lost phone"`

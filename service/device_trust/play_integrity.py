@@ -197,5 +197,8 @@ def evaluate_payload(
         "play_protect": env.get("playProtectVerdict"),
         "app_access_risk": sorted((env.get("appAccessRiskVerdict") or {}).get("appsDetected") or ()),
         "device_activity_level": (device.get("recentDeviceActivity") or {}).get("deviceActivityLevel"),
+        # Play Integrity device recall: per-device bits the bank writes, which survive reinstalls.
+        "device_recall": {k: v for k, v in ((device.get("deviceRecall") or {}).get("values") or {}).items()
+                          if k in ("bitFirst", "bitSecond", "bitThird") and isinstance(v, bool)},
     }
     return PlayIntegrityResult(tuple(dict.fromkeys(out)), signals)

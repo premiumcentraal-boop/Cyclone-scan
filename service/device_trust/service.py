@@ -32,6 +32,7 @@ from .key_description import AUTH_BIOMETRIC, AUTH_PASSWORD
 from .play_integrity import DecodeError, IntegrityTokenDecoder, b64url, enrollment_request_hash, evaluate_payload
 from .policy import TrustPolicy
 from .registry import DeviceRegistry, DuplicateDeviceKey
+from .fleet import NetworkHasher, cohort_key
 from .risk import RiskInput, RiskResult, assess, device_model_key
 from .risk import BLOCK as RISK_BAND_BLOCK
 from .risk import STEP_UP as RISK_BAND_STEP_UP
@@ -57,6 +58,8 @@ class EnrollmentRequest:
     confirm_key_chain: list[bytes] | None = None
     # Optional client signal report (see signals.py); validated here.
     client_signals: object = None
+    # Caller's IP as seen by the API; only a keyed hash of its network block is kept.
+    client_ip: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +83,7 @@ class ActionRequest:
     signature: bytes
     key: str = KEY_DEVICE
     play_integrity_token: str | None = None
+    client_ip: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +135,7 @@ class DeviceTrustService:
         self._challenges = challenges
         self._registry = registry
         self._play = play_decoder
+        self._networks = NetworkHasher(policy.fleet_hash_key)
 
     def issue_challenge(self) -> Challenge:
         return self._challenges.issue()
@@ -174,6 +179,9 @@ class DeviceTrustService:
             ],
         }
 
+    def fleet_summary(self, window_seconds: float | None = None, limit: int = 10) -> dict:
+        return self._registry.fleet_summary(window_seconds or 24 * 3600, limit)
+
     def revoke_device(self, device_id: str, reason: str) -> bool:
         revoked = self._registry.revoke(device_id, reason)
         log.info(json.dumps({"event": "device_revoked", "device_id": device_id, "found": revoked, "reason": reason}))
@@ -213,6 +221,11 @@ class DeviceTrustService:
                 reasons.append(R.SIGNALS_MALFORMED)
 
         risk = None
+        network = self._networks.network_key(req.client_ip)
+        cohort = cohort_key(asdict(att.evidence), req.reported_ids) if att.evidence else None
+        # Every attempt counts, including ones that fail: a farm's failures are part of its burst.
+        self._registry.record_fleet_event("enrollment", decision_id, None, network, cohort)
+        fleet = self._registry.fleet_counts(network, cohort, self.policy.risk.fleet_window_seconds)
         if att.evidence is not None:
             evidence = asdict(att.evidence)
             keybox = None
@@ -226,7 +239,8 @@ class DeviceTrustService:
                     att.evidence.attestation_key_sha256, self.policy.risk.keybox_window_seconds,
                 )
             risk = assess(
-                RiskInput(client_signals, play_signals, evidence, reported_ids=req.reported_ids, keybox=keybox),
+                RiskInput(client_signals, play_signals, evidence, reported_ids=req.reported_ids, keybox=keybox,
+                          fleet=fleet),
                 self.policy.risk, self.policy.signing_cert_sha256, action_type=None, now=now,
             )
             if (risk_reason := _risk_reason(risk)) is not None:
@@ -348,6 +362,8 @@ class DeviceTrustService:
             except SignalsError:
                 reasons.append(R.SIGNALS_MALFORMED)
         now_s = now.timestamp() if now else time.time()
+        network = self._networks.network_key(req.client_ip)
+        self._registry.record_fleet_event("action", decision_id, req.device_id, network, None)
         key_sha = record.evidence.get("attestation_key_sha256")
         risk = assess(
             RiskInput(
@@ -359,6 +375,7 @@ class DeviceTrustService:
                 # Re-evaluated on every action: a keybox that leaks after this
                 # device enrolled still flags it.
                 keybox=self._registry.attestation_key_stats(key_sha, p.risk.keybox_window_seconds) if key_sha else None,
+                fleet=self._registry.fleet_counts(network, None, p.risk.fleet_window_seconds),
             ),
             p.risk, p.signing_cert_sha256, action_type=action.action_type, now=now,
         )
