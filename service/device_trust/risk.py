@@ -69,6 +69,11 @@ DEFAULT_WEIGHTS: Mapping[str, int] = MappingProxyType({
     "patch_spoofed": 50,
     "os_version_mismatch": 40,
     "patch_level_inconsistent": 10,
+    # Fleet intelligence (Run 12)
+    "fleet_network_burst": 40,
+    "fleet_cohort_burst": 25,
+    "fleet_network_many_devices": 30,
+    "fleet_device_recall_flagged": 80,
     # Hardware evidence / history
     "os_patch_stale": 10,
     "no_strongbox": 0,
@@ -130,6 +135,13 @@ class RiskPolicy:
     modern_os_major: int = 14
     keybox_reuse_threshold: int = 5
     keybox_window_seconds: int = 30 * 24 * 3600
+    # Fleet intelligence (Run 12)
+    fleet_window_seconds: int = 3600
+    fleet_network_enrollment_threshold: int = 10
+    fleet_cohort_enrollment_threshold: int = 25
+    fleet_network_device_threshold: int = 20
+    # Play Integrity device-recall bits the bank sets on devices confirmed as fraudulent.
+    device_recall_fraud_bits: frozenset[str] = frozenset({"bitFirst"})
     patch_inconsistency_months: int = 24
 
     @classmethod
@@ -138,7 +150,9 @@ class RiskPolicy:
                  "trusted_installers", "stale_patch_months", "new_device_seconds",
                  "velocity_window_seconds", "velocity_max_actions", "rkp_required_models",
                  "modern_os_major", "keybox_reuse_threshold", "patch_inconsistency_months",
-                 "keybox_window_seconds"}
+                 "keybox_window_seconds", "fleet_window_seconds", "fleet_network_enrollment_threshold",
+                 "fleet_cohort_enrollment_threshold", "fleet_network_device_threshold",
+                 "device_recall_fraud_bits"}
         unknown = set(raw) - known
         if unknown:
             raise ValueError(f"unknown risk policy keys: {sorted(unknown)}")
@@ -157,11 +171,17 @@ class RiskPolicy:
             values["action_thresholds"] = {k: Thresholds(**v) for k, v in raw["action_thresholds"].items()}
         if "trusted_installers" in raw:
             values["trusted_installers"] = frozenset(raw["trusted_installers"])
+        if "device_recall_fraud_bits" in raw:
+            bits = frozenset(raw["device_recall_fraud_bits"])
+            if not bits <= {"bitFirst", "bitSecond", "bitThird"}:
+                raise ValueError("device_recall_fraud_bits must use bitFirst/bitSecond/bitThird")
+            values["device_recall_fraud_bits"] = bits
         if "rkp_required_models" in raw:
             values["rkp_required_models"] = frozenset(str(m).lower() for m in raw["rkp_required_models"])
         for key in ("stale_patch_months", "new_device_seconds", "velocity_window_seconds", "velocity_max_actions",
                     "modern_os_major", "keybox_reuse_threshold", "patch_inconsistency_months",
-                    "keybox_window_seconds"):
+                    "keybox_window_seconds", "fleet_window_seconds", "fleet_network_enrollment_threshold",
+                    "fleet_cohort_enrollment_threshold", "fleet_network_device_threshold"):
             if key in raw:
                 values[key] = int(raw[key])
         policy = cls(**values)
@@ -194,6 +214,8 @@ class RiskInput:
     reported_ids: dict | None = None
     # Fleet view of this device's attestation key: {"enrollments": n, "models": [...]}.
     keybox: dict | None = None
+    # Fleet counts around this request (fleet.py / DeviceRegistry.fleet_counts).
+    fleet: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -250,6 +272,9 @@ def observed_factors(inp: RiskInput, policy: RiskPolicy, signing_digests: frozen
             found.append(_ACTIVITY[p["device_activity_level"]])
         if p.get("app_licensing") == "UNLICENSED":
             found.append("play_unlicensed")
+        recall = p.get("device_recall") or {}
+        if any(recall.get(bit) is True for bit in policy.device_recall_fraud_bits):
+            found.append("fleet_device_recall_flagged")
 
     e = inp.evidence
     if e:
@@ -261,6 +286,15 @@ def observed_factors(inp: RiskInput, policy: RiskPolicy, signing_digests: frozen
             found.append("no_strongbox")
         found.extend(_provenance_factors(e, inp, policy))
         found.extend(_consistency_factors(e, c, policy))
+
+    f = inp.fleet
+    if f:
+        if f.get("network_enrollments", 0) >= policy.fleet_network_enrollment_threshold:
+            found.append("fleet_network_burst")
+        if f.get("cohort_enrollments", 0) >= policy.fleet_cohort_enrollment_threshold:
+            found.append("fleet_cohort_burst")
+        if f.get("network_devices", 0) >= policy.fleet_network_device_threshold:
+            found.append("fleet_network_many_devices")
 
     k = inp.keybox
     if k:

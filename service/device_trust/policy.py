@@ -30,6 +30,9 @@ class TrustPolicy:
     # defence against leaked factory keyboxes, but rejects older phones that
     # only have factory keys; the risk engine's model list is the softer default.
     require_rkp: bool = False
+    # Secret for hashing client network blocks (Run 12). Set it so fleet
+    # history survives restarts; without it a random per-process key is used.
+    fleet_hash_key: str = ""
 
     # Challenge / Play Integrity --------------------------------------------
     challenge_ttl_seconds: int = 120

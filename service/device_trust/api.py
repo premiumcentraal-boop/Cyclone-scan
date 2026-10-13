@@ -13,7 +13,7 @@ import binascii
 import hmac
 from typing import Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from .actions import MAX_SIGNED_DATA_BYTES
@@ -136,9 +136,27 @@ def _decode_chain(items: list[str]) -> list[bytes]:
     return out
 
 
-def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, admin_token: str | None = None) -> FastAPI:
-    """Build the API. ``admin_token`` enables the revoke endpoint; without it the endpoint is absent."""
-    app = FastAPI(title="Device Trust Service", version="0.4.0")
+def create_app(
+    service: DeviceTrustService,
+    *,
+    expose_reasons: bool = False,
+    admin_token: str | None = None,
+    trust_forwarded_for: bool = False,
+) -> FastAPI:
+    """Build the API. ``admin_token`` enables the admin endpoints; without it they are absent.
+
+    ``trust_forwarded_for``: take the client IP from the first X-Forwarded-For
+    entry. Enable only behind a proxy that sets it, otherwise callers can forge it.
+    """
+
+    def client_ip(request: Request) -> str | None:
+        if trust_forwarded_for:
+            forwarded = request.headers.get("x-forwarded-for", "")
+            if forwarded.strip():
+                return forwarded.split(",")[0].strip()
+        return request.client.host if request.client else None
+
+    app = FastAPI(title="Device Trust Service", version="0.5.0")
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -154,7 +172,7 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
 
     @app.post("/v1/enrollments", response_model=EnrollmentResponse, response_model_by_alias=True,
               response_model_exclude_none=True)
-    def enroll(body: EnrollmentBody) -> EnrollmentResponse:
+    def enroll(body: EnrollmentBody, request: Request) -> EnrollmentResponse:
         reported = body.device.model_dump()
         req = EnrollmentRequest(
             challenge_id=body.challenge_id,
@@ -163,6 +181,7 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
             play_integrity_token=body.play_integrity_token,
             confirm_key_chain=_decode_chain(body.confirm_key_chain) if body.confirm_key_chain else None,
             client_signals=body.signals,
+            client_ip=client_ip(request),
         )
         result = service.enroll(req)
         return EnrollmentResponse(
@@ -188,7 +207,7 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
 
     @app.post("/v1/actions/verify", response_model=ActionResponse, response_model_by_alias=True,
               response_model_exclude_none=True)
-    def verify_action(body: ActionBody) -> ActionResponse:
+    def verify_action(body: ActionBody, request: Request) -> ActionResponse:
         signed_data = _b64(body.signed_data, "signedData")
         if len(signed_data) > MAX_SIGNED_DATA_BYTES:
             raise HTTPException(status_code=422, detail="signedData too large")
@@ -200,6 +219,7 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
                 signature=_b64(body.signature, "signature"),
                 key=body.key,
                 play_integrity_token=body.play_integrity_token,
+                client_ip=client_ip(request),
             )
         )
         return ActionResponse(
@@ -216,6 +236,12 @@ def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, adm
             expected = f"Bearer {admin_token}"
             if not hmac.compare_digest(authorization.encode(), expected.encode()):
                 raise HTTPException(status_code=401, detail="unauthorized")
+
+        @app.get("/v1/admin/fleet")
+        def fleet(hours: int = 24, limit: int = 10, authorization: str = Header(default="")) -> dict:
+            """Fraud-team view: busiest network blocks, cohorts and attestation keys."""
+            _require_admin(authorization)
+            return service.fleet_summary(max(1, min(hours, 24 * 30)) * 3600, max(1, min(limit, 100)))
 
         @app.get("/v1/admin/devices/{device_id}")
         def device_detail(device_id: str, limit: int = 50, authorization: str = Header(default="")) -> dict:

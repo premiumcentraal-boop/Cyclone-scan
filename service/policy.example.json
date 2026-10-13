@@ -52,6 +52,14 @@
       "com.android.vending"
     ],
     "velocity_window_seconds": 3600,
-    "velocity_max_actions": 30
-  }
+    "velocity_max_actions": 30,
+    "fleet_window_seconds": 3600,
+    "fleet_network_enrollment_threshold": 10,
+    "fleet_cohort_enrollment_threshold": 25,
+    "fleet_network_device_threshold": 20,
+    "device_recall_fraud_bits": [
+      "bitFirst"
+    ]
+  },
+  "fleet_hash_key": "CHANGE-ME-to-a-long-random-secret"
 }

@@ -22,7 +22,8 @@ run only inside the app.
 3. **Phase 3 (done):** client RASP signals (root, hooking, emulator, tampering, scam/remote-control indicators) and an explainable server-side risk score with an audit trail.
 4. **Scanner APK (done):** on-device demo/test app (`android/scanner`).
 5. **Run 6 (done):** attestation provenance (Google RKP vs factory keybox), fleet-wide leaked-keybox detection, hardware-vs-reported patch/OS spoofing checks.
-6. **Next build runs:** native detection core (C/NDK), hook-resistant integrity, SDK self-protection, continuous protection, scam/malware depth, fleet intelligence, attack lab + benchmark. Real-device verification follows the build runs.
+6. **Run 12 (done):** fleet intelligence: network-block and cohort bursts (privacy-preserving keyed hashes), many devices per network, Play Integrity device recall, admin fleet view.
+7. **Next build runs:** SDK self-protection, continuous protection, scam/malware depth, production backbone, attack lab + benchmark. Real-device verification follows the build runs.
 
 ## Quick start
 
