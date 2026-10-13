@@ -13,6 +13,15 @@ import java.util.Base64
 interface TrustApi {
     suspend fun createChallenge(): Challenge
     suspend fun enroll(request: EnrollmentRequest): EnrollmentResult
+
+    /** Single-use challenge bound to an enrolled device, for signing one action. */
+    suspend fun createActionChallenge(deviceId: String): Challenge
+
+    /**
+     * Verify a signed action. Normally your backend calls this, not the app:
+     * the backend must execute only the action the trust service returns.
+     */
+    suspend fun verifyAction(action: SignedAction): ActionResult
 }
 
 /** Wire format shared with `device_trust/api.py`. */
@@ -33,6 +42,9 @@ object TrustJson {
         put("challengeId", request.challengeId)
         put("attestationChain", JSONArray(request.attestationChain.map { b64.encodeToString(it) }))
         request.playIntegrityToken?.let { put("playIntegrityToken", it) }
+        request.confirmKeyChain?.let { chain ->
+            put("confirmKeyChain", JSONArray(chain.map { b64.encodeToString(it) }))
+        }
         put(
             "device",
             JSONObject().apply {
@@ -44,6 +56,54 @@ object TrustJson {
             },
         )
     }.toString()
+
+    fun encodeActionChallengeRequest(deviceId: String): String =
+        JSONObject().put("deviceId", deviceId).toString()
+
+    /**
+     * The document the device signs. The server parses these exact bytes, so
+     * field order and whitespace do not matter, but every field must be present.
+     */
+    fun signedActionData(
+        deviceId: String,
+        challenge: Challenge,
+        type: String,
+        params: JSONObject,
+        timestampMillis: Long,
+    ): ByteArray = JSONObject().apply {
+        put("v", 1)
+        put("deviceId", deviceId)
+        put("challengeId", challenge.challengeId)
+        put("nonce", Base64.getUrlEncoder().withoutPadding().encodeToString(challenge.nonce))
+        put("ts", timestampMillis)
+        put("action", JSONObject().put("type", type).put("params", params))
+    }.toString().toByteArray(Charsets.UTF_8)
+
+    fun encodeAction(action: SignedAction): String = JSONObject().apply {
+        put("deviceId", action.deviceId)
+        put("challengeId", action.challengeId)
+        put("signedData", b64.encodeToString(action.signedData))
+        put("signature", b64.encodeToString(action.signature))
+        put("key", action.key.wire)
+        action.playIntegrityToken?.let { put("playIntegrityToken", it) }
+    }.toString()
+
+    fun parseActionResult(body: String): ActionResult {
+        val json = JSONObject(body)
+        val decision = when (val raw = json.getString("decision")) {
+            "ALLOW" -> ActionDecision.ALLOW
+            "STEP_UP" -> ActionDecision.STEP_UP
+            "BLOCK" -> ActionDecision.BLOCK
+            else -> throw DeviceTrustException("unknown decision '$raw'")
+        }
+        val action = json.optJSONObject("action")
+        return ActionResult(
+            decision = decision,
+            decisionId = json.getString("decisionId"),
+            actionType = action?.getString("type"),
+            paramsJson = action?.getJSONObject("params")?.toString(),
+        )
+    }
 
     fun parseEnrollment(body: String): EnrollmentResult {
         val json = JSONObject(body)
@@ -82,6 +142,17 @@ class HttpTrustApi(
     override suspend fun enroll(request: EnrollmentRequest): EnrollmentResult =
         TrustJson.parseEnrollment(post("/v1/enrollments", TrustJson.encodeEnrollment(request), expected = 200))
 
+    override suspend fun createActionChallenge(deviceId: String): Challenge = try {
+        TrustJson.parseChallenge(
+            post("/v1/action-challenges", TrustJson.encodeActionChallengeRequest(deviceId), expected = 201),
+        )
+    } catch (e: HttpStatusException) {
+        if (e.code == 404) throw NotEnrolledException() else throw e
+    }
+
+    override suspend fun verifyAction(action: SignedAction): ActionResult =
+        TrustJson.parseActionResult(post("/v1/actions/verify", TrustJson.encodeAction(action), expected = 200))
+
     private suspend fun post(path: String, body: String, expected: Int): String {
         val extraHeaders = headers()
         return withContext(Dispatchers.IO) {
@@ -97,7 +168,7 @@ class HttpTrustApi(
                 extraHeaders.forEach { (k, v) -> conn.setRequestProperty(k, v) }
                 conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                 val code = conn.responseCode
-                if (code != expected) throw DeviceTrustException("trust API $path returned HTTP $code")
+                if (code != expected) throw HttpStatusException(path, code)
                 conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
             } catch (e: IOException) {
                 throw DeviceTrustException("trust API $path unreachable", e)
@@ -107,3 +178,5 @@ class HttpTrustApi(
         }
     }
 }
+
+class HttpStatusException(path: String, val code: Int) : DeviceTrustException("trust API $path returned HTTP $code")

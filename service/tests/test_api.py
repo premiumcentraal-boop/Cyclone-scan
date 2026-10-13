@@ -81,7 +81,7 @@ def test_genuine_enrollment_is_allowed_and_registered(policy, pki):
     assert data["decision"] == "ALLOW", data
     assert data["deviceId"].startswith("dev_") and data["decisionId"].startswith("dec_")
     stored = service._registry.get(data["deviceId"])
-    assert stored["evidence"]["attested_ids"]["model"] == "Pixel 8"
+    assert stored.evidence["attested_ids"]["model"] == "Pixel 8"
     assert "SERIAL123" not in repr(stored)
 
 
@@ -132,7 +132,7 @@ def test_play_integrity_happy_path(policy, pki):
     client, service = build(policy, pki, decoder=FakeDecoder(), require_play_integrity=True)
     data = device_enroll(client, pki, play=True)[0].json()
     assert data["decision"] == "ALLOW", data
-    assert service._registry.get(data["deviceId"])["play_signals"]["device_recognition"] == ["MEETS_DEVICE_INTEGRITY"]
+    assert service._registry.get(data["deviceId"]).play_signals["device_recognition"] == ["MEETS_DEVICE_INTEGRITY"]
 
 
 def test_play_token_from_another_key_is_rejected(policy, pki):

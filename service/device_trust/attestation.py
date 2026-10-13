@@ -57,6 +57,10 @@ class AttestationEvidence:
     boot_patch_level: int | None
     attested_ids: dict[str, str]
     mismatched_ids: tuple[str, ...]
+    # Key-use authentication requirements enforced by the secure hardware.
+    no_auth_required: bool
+    user_auth_type: int | None
+    auth_timeout: int | None
     leaf_spki_sha256: str
     root_subject: str
 
@@ -238,6 +242,9 @@ def _evidence(kd: KeyDescription, mismatched, leaf_spki: bytes, root: x509.Certi
         boot_patch_level=hw.boot_patch_level,
         attested_ids=dict(hw.attested_ids),
         mismatched_ids=tuple(mismatched),
+        no_auth_required=hw.no_auth_required,
+        user_auth_type=hw.user_auth_type,
+        auth_timeout=hw.auth_timeout,
         leaf_spki_sha256=hashlib.sha256(leaf_spki).hexdigest(),
         root_subject=root.subject.rfc4514_string(),
     )

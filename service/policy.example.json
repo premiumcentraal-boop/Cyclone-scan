@@ -10,5 +10,20 @@
   "challenge_ttl_seconds": 120,
   "require_play_integrity": false,
   "play_integrity_max_age_seconds": 300,
-  "require_play_recognized": true
+  "require_play_recognized": true,
+  "action_challenge_ttl_seconds": 120,
+  "action_max_age_seconds": 120,
+  "allowed_action_types": [
+    "login",
+    "add_payee",
+    "payment",
+    "change_contact"
+  ],
+  "confirm_key_required_actions": [
+    "add_payee",
+    "payment",
+    "change_contact"
+  ],
+  "play_integrity_required_actions": [],
+  "confirm_key_allow_device_credential": false
 }

@@ -4,11 +4,14 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.PrivateKey
 import java.security.ProviderException
+import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 
 /** A hardware-backed key plus the attestation chain that proves where it lives. */
@@ -22,13 +25,31 @@ class AttestedKey(
 )
 
 interface KeyAttester {
+    /** Device-binding key: signs without user interaction. */
     fun generate(alias: String, challenge: ByteArray): AttestedKey
+
+    /**
+     * Confirm key: every signature needs a fresh strong-biometric authentication,
+     * and the key is destroyed if biometrics change. Returns null when the
+     * device cannot create one (no strong biometric enrolled, no secure lock screen).
+     */
+    fun generateConfirmKey(alias: String, challenge: ByteArray): AttestedKey?
+
+    /**
+     * A [Signature] initialised for signing with [alias]. For a confirm key it
+     * still has to be unlocked through BiometricPrompt before `sign()`.
+     *
+     * @throws ConfirmKeyInvalidatedException if the key was invalidated.
+     * @throws NotEnrolledException if the key no longer exists.
+     */
+    fun signer(alias: String): Signature
+
     fun delete(alias: String)
 }
 
 /**
- * Generates a non-exportable EC P-256 signing key in AndroidKeyStore with the
- * server challenge in its attestation certificate.
+ * Generates non-exportable EC P-256 keys in AndroidKeyStore with the server
+ * challenge in their attestation certificates.
  *
  * Tries StrongBox first, then the TEE; asks for device-property attestation on
  * Android 12+ and falls back without it on devices that cannot provide it. The
@@ -39,27 +60,20 @@ class AndroidKeyAttester(context: Context) : KeyAttester {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
 
-    override fun generate(alias: String, challenge: ByteArray): AttestedKey {
-        val attempts = buildList {
-            if (hasStrongBox) {
-                add(Attempt(strongBox = true, deviceProperties = true))
-                add(Attempt(strongBox = true, deviceProperties = false))
-            }
-            add(Attempt(strongBox = false, deviceProperties = true))
-            add(Attempt(strongBox = false, deviceProperties = false))
-        }.distinct().filter { !it.deviceProperties || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
+    override fun generate(alias: String, challenge: ByteArray): AttestedKey =
+        generateWithFallbacks(alias, challenge, userAuth = false)
+            ?: throw DeviceTrustException("no hardware-backed key could be generated", lastFailure)
 
-        var last: Exception? = null
-        for (attempt in attempts) {
-            try {
-                return generateOnce(alias, challenge, attempt)
-            } catch (e: Exception) {
-                if (!isRecoverable(e)) throw DeviceTrustException("key generation failed", e)
-                last = e
-                delete(alias)
-            }
+    override fun generateConfirmKey(alias: String, challenge: ByteArray): AttestedKey? =
+        generateWithFallbacks(alias, challenge, userAuth = true)
+
+    override fun signer(alias: String): Signature {
+        val key = keyStore().getKey(alias, null) as? PrivateKey ?: throw NotEnrolledException()
+        return try {
+            Signature.getInstance(SIGNATURE_ALGORITHM).apply { initSign(key) }
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            throw ConfirmKeyInvalidatedException(e)
         }
-        throw DeviceTrustException("no hardware-backed key could be generated", last)
     }
 
     override fun delete(alias: String) {
@@ -68,7 +82,33 @@ class AndroidKeyAttester(context: Context) : KeyAttester {
 
     private data class Attempt(val strongBox: Boolean, val deviceProperties: Boolean)
 
-    private fun generateOnce(alias: String, challenge: ByteArray, attempt: Attempt): AttestedKey {
+    @Volatile private var lastFailure: Exception? = null
+
+    private fun generateWithFallbacks(alias: String, challenge: ByteArray, userAuth: Boolean): AttestedKey? {
+        val attempts = buildList {
+            if (hasStrongBox) {
+                add(Attempt(strongBox = true, deviceProperties = true))
+                add(Attempt(strongBox = true, deviceProperties = false))
+            }
+            add(Attempt(strongBox = false, deviceProperties = true))
+            add(Attempt(strongBox = false, deviceProperties = false))
+        }.filter { !it.deviceProperties || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
+
+        for (attempt in attempts) {
+            try {
+                return generateOnce(alias, challenge, attempt, userAuth)
+            } catch (e: Exception) {
+                lastFailure = e
+                delete(alias)
+                // A user-auth key fails outright when no strong biometric is enrolled;
+                // every other failure is worth retrying with fewer features.
+                if (!userAuth && !isRecoverable(e)) throw DeviceTrustException("key generation failed", e)
+            }
+        }
+        return null
+    }
+
+    private fun generateOnce(alias: String, challenge: ByteArray, attempt: Attempt, userAuth: Boolean): AttestedKey {
         val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
             .setDigests(KeyProperties.DIGEST_SHA256)
@@ -79,6 +119,17 @@ class AndroidKeyAttester(context: Context) : KeyAttester {
                 }
                 if (attempt.deviceProperties && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     setDevicePropertiesAttestationIncluded(true)
+                }
+                if (userAuth) {
+                    setUserAuthenticationRequired(true)
+                    // Authenticate for every single signature with a strong biometric.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        setUserAuthenticationValidityDurationSeconds(-1)
+                    }
+                    setInvalidatedByBiometricEnrollment(true)
                 }
             }
             .build()
@@ -106,5 +157,6 @@ class AndroidKeyAttester(context: Context) : KeyAttester {
 
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
     }
 }

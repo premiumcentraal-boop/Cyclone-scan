@@ -43,8 +43,22 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     from .api import create_app
 
-    app = create_app(build_service(args), expose_reasons=args.expose_reasons)
+    admin_token = None
+    if args.admin_token_file:
+        admin_token = Path(args.admin_token_file).read_text(encoding="utf-8").strip()
+        if len(admin_token) < 32:
+            raise SystemExit("admin token must be at least 32 characters")
+    app = create_app(build_service(args), expose_reasons=args.expose_reasons, admin_token=admin_token)
     uvicorn.run(app, host=args.host, port=args.port)
+    return 0
+
+
+def cmd_revoke(args: argparse.Namespace) -> int:
+    registry = DeviceRegistry(args.db)
+    if not registry.revoke(args.device_id, args.reason):
+        print(f"device {args.device_id} not found", file=sys.stderr)
+        return 1
+    print(f"revoked {args.device_id}")
     return 0
 
 
@@ -76,7 +90,15 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8080)
     serve.add_argument("--expose-reasons", action="store_true",
                        help="return failure reasons to callers (development only)")
+    serve.add_argument("--admin-token-file",
+                       help="file holding the bearer token for /v1/admin endpoints (disabled if omitted)")
     serve.set_defaults(func=cmd_serve)
+
+    revoke = sub.add_parser("revoke", help="revoke an enrolled device")
+    revoke.add_argument("--db", required=True)
+    revoke.add_argument("--device-id", required=True)
+    revoke.add_argument("--reason", required=True)
+    revoke.set_defaults(func=cmd_revoke)
 
     refresh = sub.add_parser("refresh-roots", help="download Google attestation roots")
     refresh.add_argument("--out", default=str(Path(__file__).parent / "trust_anchors" / "google_roots.json"))
