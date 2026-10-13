@@ -16,6 +16,7 @@ revocation list produces a failure reason. Checks implemented:
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import hmac
 from dataclasses import dataclass, field
@@ -38,6 +39,40 @@ from .revocation import RevocationList, RevocationUnavailable
 from .roots import RootStore, spki_der
 
 MAX_CHAIN_LENGTH = 10
+
+CHAIN_RKP = "RKP"
+CHAIN_FACTORY = "FACTORY"
+_GOOGLE_RKP_INTERMEDIATES = ("Droid CA2", "Droid CA3")
+
+
+def _cn_and_org(cert: x509.Certificate) -> tuple[str | None, str | None]:
+    def first(oid):
+        attrs = cert.subject.get_attributes_for_oid(oid)
+        return attrs[0].value if attrs else None
+
+    return first(x509.NameOID.COMMON_NAME), first(x509.NameOID.ORGANIZATION_NAME)
+
+
+def classify_chain(certs: list[x509.Certificate]) -> str:
+    """RKP vs factory keybox, from the *structure* of an already-verified chain.
+
+    RKP chains are exactly: leaf <- per-device key <- "Droid CA3" <- "Droid CA2"
+    <- Google root, with each link verified. Only Google holds the Droid CA
+    keys, so a leaked factory keybox cannot produce this shape: a fake
+    "Droid CA3" signed by a keybox would sit at the wrong position with the
+    wrong issuer. Callers must have verified signatures first.
+    """
+    if len(certs) == 5:
+        ca3, ca2 = certs[2], certs[3]
+        if (
+            _cn_and_org(ca3) == ("Droid CA3", "Google LLC")
+            and _cn_and_org(ca2) == ("Droid CA2", "Google LLC")
+            and certs[1].issuer == ca3.subject
+            and ca3.issuer == ca2.subject
+            and ca2.issuer == certs[4].subject
+        ):
+            return CHAIN_RKP
+    return CHAIN_FACTORY
 _KEY_DESCRIPTION = x509.ObjectIdentifier(KEY_DESCRIPTION_OID)
 
 
@@ -63,6 +98,12 @@ class AttestationEvidence:
     auth_timeout: int | None
     leaf_spki_sha256: str
     root_subject: str
+    # Provenance of the attestation key (Run 6): "RKP" when Google's Remote Key
+    # Provisioning issued a short-lived per-device key, "FACTORY" for a keybox
+    # injected at manufacture (the kind that leaks and powers TrickyStore).
+    chain_type: str = "UNKNOWN"
+    # SHA-256 of the SubjectPublicKeyInfo of the key that signed the leaf.
+    attestation_key_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -150,14 +191,22 @@ class AttestationVerifier:
             return AttestationResult(tuple(failures + [R.ATTESTATION_EXTENSION_MALFORMED]))
 
         failures.extend(self._check_contents(kd, expected_challenge, now))
+        chain_type = classify_chain(certs)
+        if self._policy.require_rkp and chain_type != CHAIN_RKP:
+            failures.append(R.ATTESTATION_NOT_RKP)
         mismatched = _compare_ids(kd.hardware_enforced.attested_ids, reported_ids or {})
         if mismatched:
             failures.append(R.DEVICE_ID_MISMATCH)
 
         leaf_spki = spki_der(certs[0])
+        evidence = dataclasses.replace(
+            _evidence(kd, mismatched, leaf_spki, root),
+            chain_type=chain_type,
+            attestation_key_sha256=hashlib.sha256(spki_der(certs[1])).hexdigest(),
+        )
         return AttestationResult(
             tuple(dict.fromkeys(failures)),
-            _evidence(kd, mismatched, leaf_spki, root),
+            evidence,
             leaf_spki,
         )
 

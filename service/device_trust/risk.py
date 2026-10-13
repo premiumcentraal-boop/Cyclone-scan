@@ -61,6 +61,14 @@ DEFAULT_WEIGHTS: Mapping[str, int] = MappingProxyType({
     "play_activity_level_3": 20,
     "play_activity_level_4": 40,
     "play_unlicensed": 30,
+    # Attestation provenance and consistency (Run 6)
+    "attestation_not_rkp_on_rkp_model": 80,
+    "attestation_factory_keybox_modern_os": 10,
+    "attestation_key_model_conflict": 80,
+    "attestation_key_reuse": 50,
+    "patch_spoofed": 50,
+    "os_version_mismatch": 40,
+    "patch_level_inconsistent": 10,
     # Hardware evidence / history
     "os_patch_stale": 10,
     "no_strongbox": 0,
@@ -74,6 +82,21 @@ _PLAY_PROTECT = {
     "HIGH_RISK": "play_protect_high_risk",
 }
 _ACTIVITY = {"LEVEL_3": "play_activity_level_3", "LEVEL_4": "play_activity_level_4"}
+
+# Phones that only ever attest EC keys with Google RKP-provisioned keys
+# ("brand/model", lowercase, as in Build.BRAND / Build.MODEL). On these, a
+# factory-keybox chain for the SDK's EC P-256 key is the signature of a leaked
+# keybox replayed by tools such as TrickyStore. (Some of them still hold a
+# factory key for other algorithms, e.g. ML-DSA, which the SDK never uses.)
+DEFAULT_RKP_REQUIRED_MODELS = frozenset(
+    "google/" + m.lower()
+    for m in (
+        "Pixel 7", "Pixel 7 Pro", "Pixel 7a", "Pixel Fold", "Pixel Tablet",
+        "Pixel 8", "Pixel 8 Pro", "Pixel 8a",
+        "Pixel 9", "Pixel 9 Pro", "Pixel 9 Pro XL", "Pixel 9 Pro Fold", "Pixel 9a",
+        "Pixel 10", "Pixel 10 Pro", "Pixel 10 Pro XL", "Pixel 10 Pro Fold",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -102,12 +125,20 @@ class RiskPolicy:
     new_device_seconds: int = 24 * 3600
     velocity_window_seconds: int = 3600
     velocity_max_actions: int = 30
+    # Attestation provenance (Run 6)
+    rkp_required_models: frozenset[str] = DEFAULT_RKP_REQUIRED_MODELS
+    modern_os_major: int = 14
+    keybox_reuse_threshold: int = 5
+    keybox_window_seconds: int = 30 * 24 * 3600
+    patch_inconsistency_months: int = 24
 
     @classmethod
     def from_dict(cls, raw: dict) -> "RiskPolicy":
         known = {"weights", "default_thresholds", "enrollment_thresholds", "action_thresholds",
                  "trusted_installers", "stale_patch_months", "new_device_seconds",
-                 "velocity_window_seconds", "velocity_max_actions"}
+                 "velocity_window_seconds", "velocity_max_actions", "rkp_required_models",
+                 "modern_os_major", "keybox_reuse_threshold", "patch_inconsistency_months",
+                 "keybox_window_seconds"}
         unknown = set(raw) - known
         if unknown:
             raise ValueError(f"unknown risk policy keys: {sorted(unknown)}")
@@ -126,7 +157,11 @@ class RiskPolicy:
             values["action_thresholds"] = {k: Thresholds(**v) for k, v in raw["action_thresholds"].items()}
         if "trusted_installers" in raw:
             values["trusted_installers"] = frozenset(raw["trusted_installers"])
-        for key in ("stale_patch_months", "new_device_seconds", "velocity_window_seconds", "velocity_max_actions"):
+        if "rkp_required_models" in raw:
+            values["rkp_required_models"] = frozenset(str(m).lower() for m in raw["rkp_required_models"])
+        for key in ("stale_patch_months", "new_device_seconds", "velocity_window_seconds", "velocity_max_actions",
+                    "modern_os_major", "keybox_reuse_threshold", "patch_inconsistency_months",
+                    "keybox_window_seconds"):
             if key in raw:
                 values[key] = int(raw[key])
         policy = cls(**values)
@@ -154,6 +189,11 @@ class RiskInput:
     evidence: dict | None = None  # AttestationEvidence as a dict
     device_age_seconds: float | None = None
     recent_actions: int | None = None
+    # Build values the app reported (enrollment only), used when the hardware
+    # does not attest the model.
+    reported_ids: dict | None = None
+    # Fleet view of this device's attestation key: {"enrollments": n, "models": [...]}.
+    keybox: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -219,12 +259,80 @@ def observed_factors(inp: RiskInput, policy: RiskPolicy, signing_digests: frozen
             found.append("os_patch_stale")
         if e.get("attestation_security_level") != "STRONG_BOX":
             found.append("no_strongbox")
+        found.extend(_provenance_factors(e, inp, policy))
+        found.extend(_consistency_factors(e, c, policy))
+
+    k = inp.keybox
+    if k:
+        if len(set(k.get("models") or ())) >= 2:
+            found.append("attestation_key_model_conflict")
+        if (k.get("enrollments") or 0) >= policy.keybox_reuse_threshold:
+            found.append("attestation_key_reuse")
 
     if inp.device_age_seconds is not None and inp.device_age_seconds < policy.new_device_seconds:
         found.append("device_new")
     if inp.recent_actions is not None and inp.recent_actions >= policy.velocity_max_actions:
         found.append("velocity_high")
     return list(dict.fromkeys(found))
+
+
+def _month_index(level: int) -> int | None:
+    """YYYYMM or YYYYMMDD -> months since year 0, or None if invalid."""
+    if level > 999999:
+        level //= 100
+    year, month = divmod(level, 100)
+    if not 1 <= month <= 12 or year < 2000:
+        return None
+    return year * 12 + month - 1
+
+
+def device_model_key(evidence: dict, reported: dict | None) -> str | None:
+    """"brand/model" lowercase from attested IDs, else reported Build values."""
+    ids = evidence.get("attested_ids") or {}
+    brand, model = ids.get("brand"), ids.get("model")
+    if not (brand and model) and reported:
+        brand, model = reported.get("brand"), reported.get("model")
+    return f"{brand}/{model}".lower() if brand and model else None
+
+
+def _provenance_factors(e: dict, inp: RiskInput, policy: RiskPolicy) -> list[str]:
+    if e.get("chain_type") != "FACTORY":
+        return []
+    out = []
+    if device_model_key(e, inp.reported_ids) in policy.rkp_required_models:
+        out.append("attestation_not_rkp_on_rkp_model")
+    os_version = e.get("os_version")
+    if isinstance(os_version, int) and os_version // 10000 >= policy.modern_os_major:
+        out.append("attestation_factory_keybox_modern_os")
+    return out
+
+
+def _consistency_factors(e: dict, client: dict | None, policy: RiskPolicy) -> list[str]:
+    """Hardware-attested OS facts vs what the OS reports to apps (props spoofing)."""
+    out = []
+    attested = _month_index(e["os_patch_level"]) if isinstance(e.get("os_patch_level"), int) else None
+    for other in ("vendor_patch_level", "boot_patch_level"):
+        level = e.get(other)
+        other_month = _month_index(level) if isinstance(level, int) else None
+        if attested is not None and other_month is not None and abs(attested - other_month) > policy.patch_inconsistency_months:
+            out.append("patch_level_inconsistent")
+            break
+    if client:
+        reported_patch = client.get("os_security_patch")
+        if attested is not None and isinstance(reported_patch, str) and len(reported_patch) >= 7:
+            try:
+                reported = _month_index(int(reported_patch[:4]) * 100 + int(reported_patch[5:7]))
+            except ValueError:
+                reported = None
+            if reported is not None and reported != attested:
+                out.append("patch_spoofed")
+        release = client.get("os_release")
+        os_version = e.get("os_version")
+        if isinstance(release, str) and isinstance(os_version, int) and os_version > 0:
+            major = release.split(".")[0]
+            if major.isdigit() and int(major) != os_version // 10000:
+                out.append("os_version_mismatch")
+    return out
 
 
 def assess(inp: RiskInput, policy: RiskPolicy, signing_digests: frozenset[str],

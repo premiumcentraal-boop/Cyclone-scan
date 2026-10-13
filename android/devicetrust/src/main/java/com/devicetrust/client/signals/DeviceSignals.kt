@@ -49,6 +49,10 @@ class DeviceSignals(private val probe: SignalProbe) : SignalCollector {
             // app integrity
             put("app_installer", safe { probe.installerPackage() } ?: JSONObject.NULL)
             put("app_signature_sha256", safe { probe.signingCertSha256() } ?: JSONObject.NULL)
+            // OS facts as apps see them; the server compares them with the hardware-attested values,
+            // which property-spoofing modules (e.g. PlayIntegrityFix) cannot change.
+            put("os_security_patch", build?.securityPatch?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            put("os_release", build?.release?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
             // environment
             put("env_dev_options", safe { probe.globalSettingInt(DEVELOPMENT_SETTINGS_ENABLED) } == 1)
             put("env_adb", safe { probe.globalSettingInt(ADB_ENABLED) } == 1)

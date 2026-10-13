@@ -21,12 +21,15 @@ NOW = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
 PACKAGE = "com.example.bank"
 SIGNING_DIGEST = hashlib.sha256(b"example-signing-cert").digest()
 BOOT_KEY = hashlib.sha256(b"oem-verified-boot-key").digest()
+# A phone that genuinely uses a factory keybox (not on the RKP-only list), so
+# the synthetic factory-shaped chains below are realistic. Pixel + factory chain
+# is the leaked-keybox attack and is tested explicitly in test_provenance.py.
 DEVICE_IDS = {
-    "brand": "google",
-    "device": "shiba",
-    "product": "shiba",
-    "manufacturer": "Google",
-    "model": "Pixel 8",
+    "brand": "samsung",
+    "device": "e3q",
+    "product": "e3qxeea",
+    "manufacturer": "samsung",
+    "model": "SM-S928B",
 }
 
 
@@ -100,7 +103,7 @@ class KD:
     no_auth_required: bool = True
     user_auth_type: int | None = None
     auth_timeout: int | None = None
-    os_version: int = 160000
+    os_version: int = 130000
     os_patch_level: int = 202609
     vendor_patch_level: int | None = 20260905
     package: str = PACKAGE

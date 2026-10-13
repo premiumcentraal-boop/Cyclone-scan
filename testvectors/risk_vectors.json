@@ -4,7 +4,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -12,6 +20,7 @@
     "score": 0
    },
    "name": "clean_strongbox",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -32,6 +41,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -43,7 +54,15 @@
   {
    "evidence": {
     "attestation_security_level": "TRUSTED_ENVIRONMENT",
-    "os_patch_level": 202609
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -56,6 +75,7 @@
     "score": 0
    },
    "name": "clean_tee",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -76,6 +96,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -87,7 +109,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -100,6 +130,7 @@
     "score": 40
    },
    "name": "only_debug_app_debuggable",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -120,6 +151,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -131,7 +164,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -144,6 +185,7 @@
     "score": 50
    },
    "name": "only_debug_attached",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -164,6 +206,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -175,7 +219,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -188,6 +240,7 @@
     "score": 50
    },
    "name": "only_debug_traced",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -208,6 +261,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -219,7 +274,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -232,6 +295,7 @@
     "score": 60
    },
    "name": "only_emu_build",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -252,6 +316,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -263,7 +329,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -276,6 +350,7 @@
     "score": 60
    },
    "name": "only_emu_files",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -296,6 +371,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -307,7 +384,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -320,6 +405,7 @@
     "score": 10
    },
    "name": "only_env_adb",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -340,6 +426,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -351,7 +439,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -364,6 +460,7 @@
     "score": 5
    },
    "name": "only_env_dev_options",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -384,6 +481,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -395,7 +494,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -408,6 +515,7 @@
     "score": 30
    },
    "name": "only_env_external_display",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -428,6 +536,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -439,7 +549,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -452,6 +570,7 @@
     "score": 25
    },
    "name": "only_env_in_call",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -472,6 +591,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -483,7 +604,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -496,6 +625,7 @@
     "score": 45
    },
    "name": "only_env_remote_access_a11y",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -516,6 +646,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -527,7 +659,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -540,6 +680,7 @@
     "score": 5
    },
    "name": "only_env_vpn",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -560,6 +701,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -571,7 +714,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -584,6 +735,7 @@
     "score": 70
    },
    "name": "only_hook_frida",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -604,6 +756,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -615,7 +769,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -628,6 +790,7 @@
     "score": 50
    },
    "name": "only_hook_frida_port",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -648,6 +811,8 @@
     "hook_frida_port": true,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -659,7 +824,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -672,6 +845,7 @@
     "score": 60
    },
    "name": "only_hook_xposed",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -692,6 +866,8 @@
     "hook_frida_port": false,
     "hook_xposed": true,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -703,7 +879,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -716,6 +900,7 @@
     "score": 50
    },
    "name": "only_hook_zygisk",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -736,6 +921,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": true,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -747,7 +934,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -760,6 +955,7 @@
     "score": 25
    },
    "name": "only_root_apps",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -780,6 +976,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": true,
     "root_magisk": false,
     "root_su": false,
@@ -791,7 +989,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "STEP_UP",
@@ -804,6 +1010,7 @@
     "score": 50
    },
    "name": "only_root_magisk",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -824,6 +1031,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": true,
     "root_su": false,
@@ -835,7 +1044,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -848,6 +1065,7 @@
     "score": 40
    },
    "name": "only_root_su",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -868,6 +1086,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": true,
@@ -879,7 +1099,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -892,6 +1120,7 @@
     "score": 40
    },
    "name": "only_root_system_rw",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -912,6 +1141,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -923,7 +1154,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -936,6 +1175,7 @@
     "score": 20
    },
    "name": "only_root_test_keys",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -956,6 +1196,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -967,7 +1209,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -980,6 +1230,7 @@
     "score": 30
    },
    "name": "sideloaded",
+   "reported": null,
    "signals": {
     "app_installer": null,
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1000,6 +1251,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1011,7 +1264,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -1024,6 +1285,7 @@
     "score": 30
    },
    "name": "other_store",
+   "reported": null,
    "signals": {
     "app_installer": "com.other.store",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1044,6 +1306,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1055,7 +1319,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "BLOCK",
@@ -1068,6 +1340,7 @@
     "score": 80
    },
    "name": "resigned_app",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
@@ -1088,6 +1361,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1099,7 +1374,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -1107,6 +1390,7 @@
     "score": 0
    },
    "name": "signature_unknown",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": null,
@@ -1127,6 +1411,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1138,7 +1424,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -1151,6 +1445,7 @@
     "score": 10
    },
    "name": "a11y_third_party",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1171,6 +1466,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1182,7 +1479,15 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
-    "os_patch_level": 20260905
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -1195,6 +1500,7 @@
     "score": 15
    },
    "name": "remote_access_app",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1218,6 +1524,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1232,8 +1540,12 @@
     "os_patch_level": 202401
    },
    "expected": {
-    "band": "ALLOW",
+    "band": "STEP_UP",
     "factors": [
+     [
+      "patch_spoofed",
+      50
+     ],
      [
       "os_patch_stale",
       10
@@ -1243,9 +1555,10 @@
       0
      ]
     ],
-    "score": 10
+    "score": 60
    },
    "name": "stale_patch",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1266,6 +1579,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1277,7 +1592,15 @@
   {
    "evidence": {
     "attestation_security_level": "TRUSTED_ENVIRONMENT",
-    "os_patch_level": 202609
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "BLOCK",
@@ -1306,6 +1629,7 @@
     "score": 95
    },
    "name": "scam_call",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1328,6 +1652,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1339,7 +1665,15 @@
   {
    "evidence": {
     "attestation_security_level": "TRUSTED_ENVIRONMENT",
-    "os_patch_level": 202609
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "BLOCK",
@@ -1364,6 +1698,7 @@
     "score": 100
    },
    "name": "rooted_hooked",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1384,6 +1719,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": true,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": true,
     "root_su": false,
@@ -1409,6 +1746,10 @@
       60
      ],
      [
+      "patch_spoofed",
+      50
+     ],
+     [
       "app_installer_untrusted",
       30
      ],
@@ -1424,6 +1765,7 @@
     "score": 100
    },
    "name": "emulator",
+   "reported": null,
    "signals": {
     "app_installer": null,
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1444,6 +1786,8 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
     "root_su": false,
@@ -1455,7 +1799,15 @@
   {
    "evidence": {
     "attestation_security_level": "TRUSTED_ENVIRONMENT",
-    "os_patch_level": 202609
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
    },
    "expected": {
     "band": "ALLOW",
@@ -1480,6 +1832,7 @@
     "score": 20
    },
    "name": "dev_phone",
+   "reported": null,
    "signals": {
     "app_installer": "com.android.vending",
     "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
@@ -1500,8 +1853,706 @@
     "hook_frida_port": false,
     "hook_xposed": false,
     "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
     "root_apps": false,
     "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "samsung",
+     "model": "SM-A546B"
+    },
+    "boot_patch_level": 20260901,
+    "chain_type": "FACTORY",
+    "os_patch_level": 202609,
+    "os_version": 130000,
+    "vendor_patch_level": 20260901
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 0
+   },
+   "name": "factory_samsung_android13",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "13",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "samsung",
+     "model": "SM-A546B"
+    },
+    "boot_patch_level": 20260901,
+    "chain_type": "FACTORY",
+    "os_patch_level": 202609,
+    "os_version": 140000,
+    "vendor_patch_level": 20260901
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "attestation_factory_keybox_modern_os",
+      10
+     ],
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 10
+   },
+   "name": "factory_samsung_android14",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "14",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "STRONG_BOX",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "FACTORY",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "BLOCK",
+    "factors": [
+     [
+      "attestation_not_rkp_on_rkp_model",
+      80
+     ],
+     [
+      "attestation_factory_keybox_modern_os",
+      10
+     ]
+    ],
+    "score": 90
+   },
+   "name": "leaked_keybox_on_pixel",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "STRONG_BOX",
+    "attested_ids": {},
+    "boot_patch_level": 20260905,
+    "chain_type": "FACTORY",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "BLOCK",
+    "factors": [
+     [
+      "attestation_not_rkp_on_rkp_model",
+      80
+     ],
+     [
+      "attestation_factory_keybox_modern_os",
+      10
+     ]
+    ],
+    "score": 90
+   },
+   "name": "leaked_keybox_pixel_unattested_ids",
+   "reported": {
+    "brand": "google",
+    "model": "Pixel 8"
+   },
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {},
+    "boot_patch_level": 20260901,
+    "chain_type": "FACTORY",
+    "os_patch_level": 202609,
+    "os_version": 130000,
+    "vendor_patch_level": 20260901
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 0
+   },
+   "name": "unattested_ids_other_brand",
+   "reported": {
+    "brand": "Xiaomi",
+    "model": "23127PN0CG"
+   },
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "13",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "STEP_UP",
+    "factors": [
+     [
+      "patch_spoofed",
+      50
+     ],
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 50
+   },
+   "name": "patch_props_spoofed",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-10-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 0
+   },
+   "name": "patch_props_garbage",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "n/a",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "os_version_mismatch",
+      40
+     ],
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 40
+   },
+   "name": "os_release_spoofed",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "14",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 0
+   },
+   "name": "os_release_codename",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "Baklava",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20230105
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "patch_level_inconsistent",
+      10
+     ],
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 10
+   },
+   "name": "vendor_patch_far_behind",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "TRUSTED_ENVIRONMENT",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "RKP",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20251105
+   },
+   "expected": {
+    "band": "ALLOW",
+    "factors": [
+     [
+      "no_strongbox",
+      0
+     ]
+    ],
+    "score": 0
+   },
+   "name": "vendor_patch_lag_ok",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "STRONG_BOX",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "FACTORY",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "BLOCK",
+    "factors": [
+     [
+      "attestation_not_rkp_on_rkp_model",
+      80
+     ],
+     [
+      "patch_spoofed",
+      50
+     ],
+     [
+      "root_magisk",
+      50
+     ],
+     [
+      "attestation_factory_keybox_modern_os",
+      10
+     ]
+    ],
+    "score": 100
+   },
+   "name": "trickystore_full",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "os_release": "16",
+    "os_security_patch": "2026-10-05",
+    "root_apps": false,
+    "root_magisk": true,
     "root_su": false,
     "root_system_rw": false,
     "root_test_keys": false,
@@ -1510,6 +2561,25 @@
   }
  ],
  "now": "2026-10-13T00:00:00+00:00",
+ "rkp_required_models": [
+  "google/pixel 10",
+  "google/pixel 10 pro",
+  "google/pixel 10 pro fold",
+  "google/pixel 10 pro xl",
+  "google/pixel 7",
+  "google/pixel 7 pro",
+  "google/pixel 7a",
+  "google/pixel 8",
+  "google/pixel 8 pro",
+  "google/pixel 8a",
+  "google/pixel 9",
+  "google/pixel 9 pro",
+  "google/pixel 9 pro fold",
+  "google/pixel 9 pro xl",
+  "google/pixel 9a",
+  "google/pixel fold",
+  "google/pixel tablet"
+ ],
  "thresholds": {
   "allow_below": 50,
   "block_at": 80

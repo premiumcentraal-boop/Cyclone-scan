@@ -11,7 +11,7 @@ private val PIXEL = BuildInfo(
     tags = "release-keys",
     fingerprint = "google/shiba/shiba:16/BP2A.250805.005/13691446:user/release-keys",
     hardware = "shiba", product = "shiba", model = "Pixel 8", manufacturer = "Google",
-    brand = "google", device = "shiba",
+    brand = "google", device = "shiba", securityPatch = "2026-09-05", release = "16",
 )
 
 /** Clean phone by default; tests flip individual answers. */
@@ -77,6 +77,7 @@ class DeviceSignalsTest {
     fun reportHasExactlyTheServerSchema() {
         val expected = boolKeys.toSet() + setOf(
             "v", "env_a11y_third_party", "env_remote_access_apps", "app_installer", "app_signature_sha256",
+            "os_security_patch", "os_release",
         )
         assertEquals(expected, collect().keySet())
     }
@@ -170,6 +171,14 @@ class DeviceSignalsTest {
         assertEquals(2, report.getInt("env_a11y_third_party"))
         assertTrue(report.getBoolean("env_remote_access_a11y"))
         assertEquals("anydesk", report.getJSONArray("env_remote_access_apps").getString(0))
+    }
+
+    @Test
+    fun reportsOsFactsForAttestationCrossCheck() {
+        val report = collect()
+        assertEquals("2026-09-05", report.getString("os_security_patch"))
+        assertEquals("16", report.getString("os_release"))
+        assertTrue(collect { buildInfo = PIXEL.copy(securityPatch = "", release = "") }.isNull("os_release"))
     }
 
     @Test

@@ -138,7 +138,7 @@ def _decode_chain(items: list[str]) -> list[bytes]:
 
 def create_app(service: DeviceTrustService, *, expose_reasons: bool = False, admin_token: str | None = None) -> FastAPI:
     """Build the API. ``admin_token`` enables the revoke endpoint; without it the endpoint is absent."""
-    app = FastAPI(title="Device Trust Service", version="0.3.0")
+    app = FastAPI(title="Device Trust Service", version="0.4.0")
 
     @app.get("/healthz")
     def healthz() -> dict:

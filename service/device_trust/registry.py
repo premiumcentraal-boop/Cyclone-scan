@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS decisions (
     created_at    REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS decisions_device_time ON decisions (device_id, created_at);
+-- Which attestation key (factory keybox or RKP key) each enrollment attempt
+-- used, and which model it claimed: a leaked keybox shows up as one key with
+-- many models or too many enrollments.
+CREATE TABLE IF NOT EXISTS attestation_key_uses (
+    key_sha256  TEXT NOT NULL,
+    decision_id TEXT NOT NULL,
+    model       TEXT,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS attestation_key_uses_key_time ON attestation_key_uses (key_sha256, created_at);
 """
 
 # Columns added after Phase 1; applied in place to existing databases.
@@ -190,6 +200,26 @@ class DeviceRegistry:
              "factors": [tuple(f) for f in json.loads(r[5])], "reasons": json.loads(r[6]), "created_at": r[7]}
             for r in rows
         ]
+
+    def record_attestation_key(self, key_sha256: str, decision_id: str, model: str | None) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO attestation_key_uses VALUES (?, ?, ?, ?)",
+                (key_sha256, decision_id, model, self._clock()),
+            )
+
+    def attestation_key_stats(self, key_sha256: str, window_seconds: float) -> dict:
+        """{"enrollments": attempts in the window, "models": distinct models ever seen}."""
+        with self._lock:
+            enrollments = self._conn.execute(
+                "SELECT COUNT(*) FROM attestation_key_uses WHERE key_sha256 = ? AND created_at >= ?",
+                (key_sha256, self._clock() - window_seconds),
+            ).fetchone()[0]
+            models = [r[0] for r in self._conn.execute(
+                "SELECT DISTINCT model FROM attestation_key_uses WHERE key_sha256 = ? AND model IS NOT NULL",
+                (key_sha256,),
+            )]
+        return {"enrollments": enrollments, "models": sorted(models)}
 
     def count(self) -> int:
         with self._lock:
