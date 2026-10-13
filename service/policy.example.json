@@ -1,0 +1,14 @@
+{
+  "package_name": "com.example.bank",
+  "signing_cert_sha256": [
+    "0000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "min_security_level": "TRUSTED_ENVIRONMENT",
+  "max_os_patch_age_months": 12,
+  "allowed_self_signed_boot_keys": [],
+  "clock_skew_seconds": 300,
+  "challenge_ttl_seconds": 120,
+  "require_play_integrity": false,
+  "play_integrity_max_age_seconds": 300,
+  "require_play_recognized": true
+}

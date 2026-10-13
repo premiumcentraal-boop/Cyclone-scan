@@ -1,0 +1,2 @@
+# Real attestation chains are public Google test data, not secrets.
+!*.pem

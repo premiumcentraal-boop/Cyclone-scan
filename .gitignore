@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+dist/
+build/
+
+# Android / Gradle
+.gradle/
+.kotlin/
+local.properties
+*.jks
+*.keystore
+*.p12
+
+# Local runtime data and secrets
+*.sqlite
+policy.json
+service-account*.json
+.env
