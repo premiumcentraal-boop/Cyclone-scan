@@ -119,6 +119,16 @@ class OnDeviceEngineTest {
     }
 
     @Test
+    fun unavailableRevocationCannotProduceCleanLocalVerdict() {
+        val certs = chain("caiman_sdk36_TEE_EC_RKP")
+        val kd = KeyDescriptionParser.parse(ChainVerifier.unwrapOctetString(certs[0].getExtensionValue(KEY_DESCRIPTION_OID)))
+        val roots = listOf(certs.last().publicKey.encoded)
+        val report = ChainVerifier(roots, null).verify(certs.map { it.encoded }, kd.challenge,
+            kd.softwareEnforced.appId!!.packageNames.first(), kd.hardwareEnforced.attestedIds)
+        assertEquals(Check.Status.FAIL, report.checks.first { it.id == "revocation" }.status)
+    }
+
+    @Test
     fun revocationListParsing() {
         val set = ChainVerifier.parseRevocations("""{"entries":{"00ABC":{"status":"REVOKED"},"1f43":{"status":"REVOKED"}}}""")
         assertEquals(setOf("abc", "1f43"), set)

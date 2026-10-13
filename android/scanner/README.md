@@ -65,3 +65,7 @@ The release build is minified and **not debuggable** (a debuggable build would
 flag itself); it is signed with the local debug key so it installs directly.
 CI uploads the APK as the `device-trust-scanner-apk` artifact. Each machine's
 debug key differs, so uninstall before installing a build from another machine.
+
+## Run 13 (0.6.0)
+
+The Native versus Kotlin group shows nine native checks with per-check availability and comparable snapshot results. A maps or TracerPid disagreement is a signal only when Kotlin snapshots are stable and the native check completed. Unavailable reads never count as a mismatch. The local verdict is diagnostic: Play Integrity, fleet history and independent official-signer verification require the server/integration. Offline revocation and unallowlisted SELF_SIGNED boot are blocking local findings. Existing Google-root/chain compatibility limitations remain listed in the run notes.

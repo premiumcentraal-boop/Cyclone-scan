@@ -19,6 +19,10 @@ STEP_UP = "STEP_UP"
 BLOCK = "BLOCK"
 
 DEFAULT_WEIGHTS: Mapping[str, int] = MappingProxyType({
+    # Native-only observations; overlapping Kotlin/native checks share a factor.
+    "native_selinux_permissive": 20,
+    "native_code_modified": 60,
+    "native_kotlin_mismatch": 40,
     # Client: root
     "root_su": 40,
     "root_magisk": 50,
@@ -80,6 +84,8 @@ DEFAULT_WEIGHTS: Mapping[str, int] = MappingProxyType({
     "device_new": 10,
     "velocity_high": 30,
 })
+
+NATIVE_ALIASES = {'native_root_su':'root_su','native_root_magisk':'root_magisk','native_root_system_rw':'root_system_rw','native_hook_frida':'hook_frida','native_hook_xposed':'hook_xposed','native_hook_zygisk':'hook_zygisk','native_debug_traced':'debug_traced'}
 
 _PLAY_PROTECT = {
     "POSSIBLE_RISK": "play_protect_possible_risk",
@@ -244,7 +250,13 @@ def observed_factors(inp: RiskInput, policy: RiskPolicy, signing_digests: frozen
     if c is None:
         found.append("client_signals_missing")
     else:
-        found.extend(sorted(k for k, v in c.items() if v is True))
+        found.extend(sorted(k for k, v in c.items() if v is True and not k.startswith("native_")))
+        for native_key, factor in NATIVE_ALIASES.items():
+            if c.get(native_key) is True and c.get(native_key + "_status") == "DETECTED":
+                found.append(factor)
+        for factor in ("native_selinux_permissive", "native_code_modified", "native_kotlin_mismatch"):
+            if c.get(factor) is True and c.get(factor + "_status") == "DETECTED":
+                found.append(factor)
         if c.get("env_a11y_third_party", 0) > 0:
             found.append("env_a11y_third_party")
         if c.get("env_remote_access_apps"):

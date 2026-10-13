@@ -18,11 +18,11 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent / "service"))
 
 from device_trust.risk import RiskInput, RiskPolicy, assess  # noqa: E402
-from device_trust.signals import BOOL_SIGNALS, parse_client_signals  # noqa: E402
+from device_trust.signals import BOOL_SIGNALS, NATIVE_BOOL_SIGNALS, parse_client_signals  # noqa: E402
 
 NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
 DIGEST = "ab" * 32
-CLEAN = {"v": 1, **{k: False for k in sorted(BOOL_SIGNALS)}, "app_installer": "com.android.vending",
+CLEAN = {**{key + "_status": "NOT_DETECTED" for key in NATIVE_BOOL_SIGNALS}, "v": 1, **{k: False for k in sorted(BOOL_SIGNALS)}, "app_installer": "com.android.vending",
          "app_signature_sha256": DIGEST, "env_a11y_third_party": 0, "env_remote_access_apps": [],
          "os_security_patch": "2026-09-05", "os_release": "16"}
 _OS16 = {"os_version": 160000, "vendor_patch_level": 20260905, "boot_patch_level": 20260905}
@@ -40,7 +40,14 @@ def cases():
     yield "clean_strongbox", CLEAN, SB_FRESH
     yield "clean_tee", CLEAN, TEE_FRESH
     for key in sorted(BOOL_SIGNALS):
-        yield f"only_{key}", {**CLEAN, key: True}, SB_FRESH
+        yield f"only_{key}", {**CLEAN, key: True, **({key + "_status": "DETECTED"} if key in NATIVE_BOOL_SIGNALS else {})}, SB_FRESH
+    yield "native_kotlin_agree_root_once", {**CLEAN, "root_su": True, "native_root_su": True,
+                                           "native_root_su_status": "DETECTED"}, SB_FRESH
+    yield "native_unavailable", {**CLEAN, **{key + "_status": "UNAVAILABLE" for key in NATIVE_BOOL_SIGNALS}}, SB_FRESH
+    yield "native_code_and_mismatch_cap", {**CLEAN, "native_code_modified": True,
+                                         "native_code_modified_status": "DETECTED",
+                                         "native_kotlin_mismatch": True,
+                                         "native_kotlin_mismatch_status": "DETECTED"}, SB_FRESH
     yield "sideloaded", {**CLEAN, "app_installer": None}, SB_FRESH
     yield "other_store", {**CLEAN, "app_installer": "com.other.store"}, SB_FRESH
     yield "resigned_app", {**CLEAN, "app_signature_sha256": "cd" * 32}, SB_FRESH

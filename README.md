@@ -23,7 +23,8 @@ run only inside the app.
 4. **Scanner APK (done):** on-device demo/test app (`android/scanner`).
 5. **Run 6 (done):** attestation provenance (Google RKP vs factory keybox), fleet-wide leaked-keybox detection, hardware-vs-reported patch/OS spoofing checks.
 6. **Run 12 (done):** fleet intelligence: network-block and cohort bursts (privacy-preserving keyed hashes), many devices per network, Play Integrity device recall, admin fleet view.
-7. **Next build runs:** SDK self-protection, continuous protection, scam/malware depth, production backbone, attack lab + benchmark. Real-device verification follows the build runs.
+7. **Run 13:** native own-process collector, native/Kotlin comparisons and honest coverage reporting; see [run notes](docs/RUN_13_NATIVE.md).
+8. **Next build runs:** SDK self-protection, continuous protection, scam/malware depth, production backbone, attack lab + benchmark. Real-device verification follows the build runs.
 
 ## Quick start
 

@@ -71,5 +71,25 @@ fun signalGroups(signals: JSONObject, factors: List<Pair<String, Int>>): List<Si
         factorRow("os_version_mismatch", "reported Android version matches hardware"),
         factorRow("patch_level_inconsistent", "OS, vendor and boot patches consistent"),
     )))
+    val nativeRows = com.devicetrust.client.signals.NativeSignals.CHECKS.map { key ->
+        val native = signals.optString("native_" + key + "_status", "UNAVAILABLE")
+        val kotlin = signals.optString("kotlin_" + key + "_comparison_status", "UNAVAILABLE")
+        val comparison = signals.optString("native_" + key + "_comparison", "UNAVAILABLE")
+        SignalRow(
+            LocalRisk.DESCRIPTIONS[key] ?: LocalRisk.DESCRIPTIONS["native_" + key] ?: key,
+            when (native) {
+                "DETECTED" -> Check.Status.WARN
+                "NOT_DETECTED" -> Check.Status.PASS
+                else -> Check.Status.INFO
+            },
+            "Native: " + native + " · Kotlin comparable snapshot: " + kotlin + " · " + comparison,
+        )
+    }
+    groups.add(0, SignalGroup("Native versus Kotlin", nativeRows + SignalRow(
+        "Equivalent observations disagree",
+        if (signals.optBoolean("native_kotlin_mismatch")) Check.Status.WARN else Check.Status.INFO,
+        signals.optString("native_kotlin_mismatch_status", "UNAVAILABLE") +
+            " · unavailable reads are not evidence of safety",
+    )))
     return groups
 }

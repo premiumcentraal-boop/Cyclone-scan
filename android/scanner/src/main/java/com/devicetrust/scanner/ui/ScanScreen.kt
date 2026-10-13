@@ -107,7 +107,8 @@ private fun ScanResultView(result: ScanResult) {
     SectionCard("About this result", "Scan took ${result.durationMs} ms") {
         Text(
             "Local mode: the phone judged itself, so a fully compromised phone could lie here. In production the " +
-                "same evidence goes to the server, which makes the decision. Use the Server tab to try that flow.",
+                "evidence goes to the server, which makes the decision. This scan does not evaluate Play Integrity, " +
+                "fleet history or an independently trusted scanner signing certificate. Missing checks are not proof of safety.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -125,7 +126,7 @@ private fun ScanResultView(result: ScanResult) {
         ) {
             Icon(Icons.Filled.Share, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Share report (JSON, no personal data)")
+            Text("Share diagnostic report (JSON)")
         }
     }
 }
@@ -133,9 +134,9 @@ private fun ScanResultView(result: ScanResult) {
 @Composable
 private fun VerdictCard(result: ScanResult) {
     val (color, icon, title, line) = when (result.verdict) {
-        Verdict.ALLOW -> Quad(Green, Icons.Filled.GppGood, "Trusted device", "Would be allowed for banking actions")
-        Verdict.STEP_UP -> Quad(Amber, Icons.Filled.GppMaybe, "Extra verification needed", "Would ask for step-up authentication")
-        Verdict.BLOCK -> Quad(Red, Icons.Filled.GppBad, "Not trusted", "Would be blocked")
+        Verdict.ALLOW -> Quad(Green, Icons.Filled.GppGood, "No blocking local findings", "Diagnostic only · server verification required")
+        Verdict.STEP_UP -> Quad(Amber, Icons.Filled.GppMaybe, "Local risk indicators", "Review findings with server verification")
+        Verdict.BLOCK -> Quad(Red, Icons.Filled.GppBad, "Blocking local findings", "Inspect failed or unavailable checks")
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
