@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DeviceTrustAndroid"
 include(":devicetrust")
+include(":scanner")

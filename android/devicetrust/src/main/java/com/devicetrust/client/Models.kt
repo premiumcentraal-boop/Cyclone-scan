@@ -59,6 +59,16 @@ data class EnrollmentResult(
     val decision: Decision,
     val decisionId: String,
     val deviceId: String?,
+    /** Only when the server runs with --expose-reasons (development). */
+    val diagnostics: ServerDiagnostics? = null,
+)
+
+/** Reason codes and risk breakdown, returned only by development servers. */
+data class ServerDiagnostics(
+    val reasons: List<String>,
+    val warnings: List<String>,
+    val riskScore: Int?,
+    val riskFactors: List<Pair<String, Int>>,
 )
 
 /**
@@ -101,6 +111,8 @@ data class ActionResult(
     val actionType: String?,
     /** Only on ALLOW: the params the device signed, as JSON text. */
     val paramsJson: String?,
+    /** Only when the server runs with --expose-reasons (development). */
+    val diagnostics: ServerDiagnostics? = null,
 )
 
 open class DeviceTrustException(message: String, cause: Throwable? = null) : Exception(message, cause)
