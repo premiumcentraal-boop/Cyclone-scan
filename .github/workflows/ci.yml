@@ -55,4 +55,13 @@ jobs:
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Test, lint and assemble
-        run: ./gradlew --no-daemon :devicetrust:testDebugUnitTest :devicetrust:lintRelease :devicetrust:assembleRelease
+        run: >-
+          ./gradlew --no-daemon
+          :devicetrust:testDebugUnitTest :devicetrust:lintRelease :devicetrust:assembleRelease
+          :scanner:testReleaseUnitTest :scanner:assembleRelease
+      - name: Upload scanner APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-trust-scanner-apk
+          path: android/scanner/build/outputs/apk/release/scanner-release.apk
+          if-no-files-found: error

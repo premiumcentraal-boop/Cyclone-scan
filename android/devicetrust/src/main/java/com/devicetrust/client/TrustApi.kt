@@ -106,7 +106,18 @@ object TrustJson {
             decisionId = json.getString("decisionId"),
             actionType = action?.getString("type"),
             paramsJson = action?.getJSONObject("params")?.toString(),
+            diagnostics = parseDiagnostics(json),
         )
+    }
+
+    private fun parseDiagnostics(json: JSONObject): ServerDiagnostics? {
+        if (!json.has("reasons") && !json.has("risk")) return null
+        fun strings(key: String) = json.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
+        val risk = json.optJSONObject("risk")
+        val factors = risk?.optJSONArray("factors")?.let { a ->
+            (0 until a.length()).map { a.getJSONObject(it).let { f -> f.getString("factor") to f.getInt("points") } }
+        }.orEmpty()
+        return ServerDiagnostics(strings("reasons"), strings("warnings"), risk?.getInt("score"), factors)
     }
 
     fun parseEnrollment(body: String): EnrollmentResult {
@@ -121,6 +132,7 @@ object TrustJson {
             decision = decision,
             decisionId = json.getString("decisionId"),
             deviceId = if (json.isNull("deviceId")) null else json.optString("deviceId").ifEmpty { null },
+            diagnostics = parseDiagnostics(json),
         )
     }
 }
