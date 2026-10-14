@@ -6,6 +6,10 @@ import os
 from pathlib import Path
 import re
 import tempfile
+from .evidence_json import read_json
+
+LAB_MAX_BYTES = 16 * 1024 * 1024
+OBSERVATION_MAX_BYTES = 64 * 1024
 
 CASES = {
     "clean_pixel": "Clean reference Pixel", "clean_samsung": "Clean reference Samsung",
@@ -30,27 +34,36 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 def _hex(value, pattern):
     return isinstance(value,str) and pattern.fullmatch(value) and set(value)!={"0"}
 
+def validate_candidate(revision,apk_sha256):
+    if not _hex(revision,_HEX40) or not _hex(apk_sha256,_HEX64):
+        raise ValueError("concrete candidate revision and APK digest required")
+
+def _enum(value,allowed):
+    return isinstance(value,str) and value in allowed
+
 def validate(raw):
     if not isinstance(raw,dict) or not _REQUIRED <= set(raw) <= _REQUIRED | _OPTIONAL:
         raise ValueError("observation must contain only the documented fields")
-    if type(raw["schema"]) is not int or raw["schema"]!=1 or raw["case_id"] not in CASES:
+    if type(raw["schema"]) is not int or raw["schema"]!=1 or not _enum(raw["case_id"],CASES):
         raise ValueError("unsupported schema or case")
     for key in ("observation_id","device_alias"):
         if not isinstance(raw[key],str) or not _TOKEN.fullmatch(raw[key]):
             raise ValueError("invalid anonymous identifier")
     if not isinstance(raw["os"],str) or not 1<=len(raw["os"])<=96:
         raise ValueError("invalid OS description")
-    if not _hex(raw["revision"],_HEX40) or not _hex(raw["apk_sha256"],_HEX64):
-        raise ValueError("revision and APK hash must be concrete hexadecimal values")
+    validate_candidate(raw["revision"],raw["apk_sha256"])
+    try:raw["os"].encode("utf-8")
+    except UnicodeError as error:raise ValueError("invalid OS text") from error
+    if any(ord(char)<32 for char in raw["os"]):raise ValueError("invalid OS text")
     if "source_report_sha256" in raw and not _hex(raw["source_report_sha256"],_HEX64):
         raise ValueError("invalid source report hash")
-    if raw["origin"] not in {"PHYSICAL","EMULATOR","SYNTHETIC"}:
+    if not _enum(raw["origin"],{"PHYSICAL","EMULATOR","SYNTHETIC"}):
         raise ValueError("invalid evidence origin")
-    if raw["ground_truth"] not in {"CLEAN","ALTERED","UNKNOWN"}:
+    if not _enum(raw["ground_truth"],{"CLEAN","ALTERED","UNKNOWN"}):
         raise ValueError("invalid declared ground truth")
-    if raw["verdict"] not in {"ALLOW","STEP_UP","BLOCK","INCOMPLETE","ERROR"}:
+    if not _enum(raw["verdict"],{"ALLOW","STEP_UP","BLOCK","INCOMPLETE","ERROR"}):
         raise ValueError("invalid verdict")
-    if raw["coverage"] not in {"COMPLETE","PARTIAL","UNAVAILABLE"}:
+    if not _enum(raw["coverage"],{"COMPLETE","PARTIAL","UNAVAILABLE"}):
         raise ValueError("invalid coverage")
     if type(raw["duration_ms"]) is not int or not 0<=raw["duration_ms"]<=3600000:
         raise ValueError("invalid duration")
@@ -71,10 +84,16 @@ def validate(raw):
     codes=raw["evidence_codes"]
     if not isinstance(codes,list) or len(codes)>64 or any(not isinstance(v,str) or not _TOKEN.fullmatch(v) for v in codes):
         raise ValueError("invalid bounded evidence codes")
-    stamp=dt.datetime.fromisoformat(raw["observed_at"])
-    if stamp.tzinfo is None:
-        raise ValueError("timestamp must include timezone")
-    return {**raw,"evidence_codes":sorted(set(codes))}
+    stamp=raw["observed_at"]
+    if not isinstance(stamp,str) or not 1<=len(stamp)<=64:
+        raise ValueError("invalid observation timestamp")
+    try:
+        stamp=dt.datetime.fromisoformat(stamp)
+        if stamp.tzinfo is None:raise ValueError("timestamp must include timezone")
+        stamp=stamp.astimezone(dt.timezone.utc)
+    except (ValueError,OverflowError) as error:
+        raise ValueError("invalid observation timestamp") from error
+    return {**raw,"observed_at":stamp.isoformat(),"evidence_codes":sorted(set(codes))}
 
 def validate_document(doc):
     if not isinstance(doc,dict) or set(doc)!={"schema","observations"} or type(doc["schema"]) is not int or doc["schema"]!=1:
@@ -88,10 +107,7 @@ def validate_document(doc):
     return {"schema":1,"observations":rows}
 
 def read_document(path):
-    path=Path(path)
-    if path.stat().st_size>16*1024*1024:
-        raise ValueError("lab document too large")
-    return validate_document(json.loads(path.read_text(encoding="utf-8")))
+    return validate_document(read_json(path,LAB_MAX_BYTES))
 
 def write_document(path,document):
     path=Path(path);document=validate_document(document)
@@ -112,6 +128,7 @@ def record(path,observation):
     write_document(path,current)
 
 def summary(document,revision,apk_sha256):
+    validate_candidate(revision,apk_sha256)
     doc=validate_document(document)
     selected=[row for row in doc["observations"] if row["revision"]==revision and row["apk_sha256"]==apk_sha256]
     result={}
@@ -138,7 +155,7 @@ def main(argv=None):
             if Path(args.file).exists(): raise ValueError("refusing to replace an existing lab document")
             write_document(args.file,{"schema":1,"observations":[]})
         elif args.command=="record":
-            observation=json.loads(Path(args.observation).read_text(encoding="utf-8"))
+            observation=read_json(args.observation,OBSERVATION_MAX_BYTES)
             record(args.file,observation)
         else:
             print(json.dumps(summary(read_document(args.file),args.revision,args.apk_sha256),indent=2))

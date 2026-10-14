@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .actions import MAX_SIGNED_DATA_BYTES
 from .enrollment_proof import MAX_PROOF_BYTES
 from .challenges import Challenge, ChallengeCapacityExceeded
+from .lifecycle import REVOKE_REASONS, STEP_UP_METHODS, Principal
 from .play_integrity import b64url
 from .service import ActionRequest, DeviceTrustService, EnrollmentRequest
 
@@ -82,6 +83,8 @@ class EnrollmentResponse(_Model):
     decision: str
     decision_id: str = Field(alias="decisionId")
     device_id: str | None = Field(default=None, alias="deviceId")
+    # Run 16: "active" or "pending" (awaiting authenticated step-up completion).
+    device_status: str | None = Field(default=None, alias="deviceStatus")
     reasons: list[str] | None = None
     warnings: list[str] | None = None
     risk: RiskOut | None = None
@@ -118,6 +121,22 @@ class RevokeBody(_Model):
     reason: str = Field(min_length=1, max_length=200)
 
 
+class StepUpCompletionBody(_Model):
+    # The method the customer's backend used to verify the account owner.
+    method: Literal[tuple(sorted(STEP_UP_METHODS))]  # type: ignore[valid-type]
+
+
+class OwnerRevokeBody(_Model):
+    reason: Literal[tuple(sorted(REVOKE_REASONS))]  # type: ignore[valid-type]
+
+
+class DeviceStatusOut(_Model):
+    device_id: str = Field(alias="deviceId")
+    status: str
+    binding: str
+    has_confirm_key: bool = Field(alias="hasConfirmKey")
+
+
 def _b64(value: str, field: str) -> bytes:
     try:
         normalized = value.strip().replace("-", "+").replace("_", "/")
@@ -150,8 +169,16 @@ def create_app(
     expose_reasons: bool = False,
     admin_token: str | None = None,
     trust_forwarded_for: bool = False,
+    gateway_token: str | None = None,
 ) -> FastAPI:
     """Build the API. ``admin_token`` enables the admin endpoints; without it they are absent.
+
+    ``gateway_token`` (Run 16): the service sits behind the customer's backend,
+    which authenticates the user and forwards the request with
+    ``X-Gateway-Authorization: Bearer <gateway_token>``, ``X-Tenant-Id`` and
+    ``X-Account-Id``. Only then are tenant/account trusted; account headers
+    from anyone else are ignored. With a gateway token every device endpoint
+    requires it, and the owner endpoints (/v1/devices/...) exist.
 
     ``trust_forwarded_for``: take the client IP from the first X-Forwarded-For
     entry. Enable only behind a proxy that sets it, otherwise callers can forge it.
@@ -166,14 +193,26 @@ def create_app(
 
     app = FastAPI(title="Device Trust Service", version="0.5.0")
 
+    def principal(request: Request) -> Principal | None:
+        if not gateway_token:
+            return None  # development / single-tenant mode: no principal is ever trusted
+        auth = request.headers.get("x-gateway-authorization", "")
+        if not hmac.compare_digest(auth.encode(), f"Bearer {gateway_token}".encode()):
+            raise HTTPException(status_code=401, detail="unauthorized")
+        try:
+            return Principal(request.headers.get("x-tenant-id", ""), request.headers.get("x-account-id", ""))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid principal") from None
+
     @app.get("/healthz")
     def healthz() -> dict:
         return {"status": "ok"}
 
     @app.post("/v1/challenges", status_code=201, response_model=ChallengeResponse, response_model_by_alias=True)
-    def create_challenge() -> ChallengeResponse:
+    def create_challenge(request: Request) -> ChallengeResponse:
+        who = principal(request)
         try:
-            c = service.issue_challenge()
+            c = service.issue_challenge(who)
         except ChallengeCapacityExceeded:
             raise HTTPException(status_code=503, detail="try again later") from None
         return _challenge_response(c)
@@ -193,11 +232,12 @@ def create_app(
             evidence_signature=_b64(body.evidence_signature, "evidenceSignature") if body.evidence_signature is not None else None,
             client_ip=client_ip(request),
         )
-        result = service.enroll(req)
+        result = service.enroll(req, principal=principal(request))
         return EnrollmentResponse(
             decision=result.decision,
             decisionId=result.decision_id,
             deviceId=result.device_id,
+            deviceStatus=result.device_status,
             reasons=list(result.reasons) if expose_reasons else None,
             warnings=list(result.warnings) if expose_reasons else None,
             risk=_risk_out(result.risk) if expose_reasons else None,
@@ -205,19 +245,21 @@ def create_app(
 
     @app.post("/v1/action-challenges", status_code=201, response_model=ChallengeResponse,
               response_model_by_alias=True)
-    def create_action_challenge(body: ActionChallengeBody) -> ChallengeResponse:
+    def create_action_challenge(body: ActionChallengeBody, request: Request) -> ChallengeResponse:
+        who = principal(request)
         try:
-            c = service.issue_action_challenge(body.device_id)
+            c = service.issue_action_challenge(body.device_id, who)
         except ChallengeCapacityExceeded:
             raise HTTPException(status_code=503, detail="try again later") from None
         if c is None:
-            # Same answer for unknown and revoked devices.
+            # Same answer for unknown, not-owned, pending and revoked devices.
             raise HTTPException(status_code=404, detail="device not enrolled")
         return _challenge_response(c)
 
     @app.post("/v1/actions/verify", response_model=ActionResponse, response_model_by_alias=True,
               response_model_exclude_none=True)
     def verify_action(body: ActionBody, request: Request) -> ActionResponse:
+        who = principal(request)
         signed_data = _b64(body.signed_data, "signedData")
         if len(signed_data) > MAX_SIGNED_DATA_BYTES:
             raise HTTPException(status_code=422, detail="signedData too large")
@@ -230,7 +272,8 @@ def create_app(
                 key=body.key,
                 play_integrity_token=body.play_integrity_token,
                 client_ip=client_ip(request),
-            )
+            ),
+            principal=who,
         )
         return ActionResponse(
             decision=result.decision,
@@ -240,6 +283,37 @@ def create_app(
             warnings=list(result.warnings) if expose_reasons else None,
             risk=_risk_out(result.risk) if expose_reasons else None,
         )
+
+    if gateway_token:
+        @app.get("/v1/devices/{device_id}", response_model=DeviceStatusOut, response_model_by_alias=True)
+        def device_status(device_id: str, request: Request) -> DeviceStatusOut:
+            """Owner view of one device's lifecycle state (no evidence or backend reasons)."""
+            status = service.device_status(device_id, principal(request))
+            if status is None:
+                raise HTTPException(status_code=404, detail="device not found")
+            return DeviceStatusOut(**status)
+
+        @app.post("/v1/devices/{device_id}/step-up-completion", response_model=DeviceStatusOut,
+                  response_model_by_alias=True)
+        def complete_step_up(device_id: str, body: StepUpCompletionBody, request: Request) -> DeviceStatusOut:
+            """The customer's backend reports that it verified the account owner (pending -> active)."""
+            who = principal(request)
+            outcome = service.complete_step_up(device_id, body.method, principal=who, actor="gateway")
+            _step_up_http(outcome)
+            return DeviceStatusOut(**service.device_status(device_id, who))
+
+        @app.post("/v1/devices/{device_id}/revoke", status_code=204)
+        def owner_revoke(device_id: str, body: OwnerRevokeBody, request: Request) -> None:
+            if not service.revoke_owned_device(device_id, body.reason, principal(request)):
+                raise HTTPException(status_code=404, detail="device not found")
+
+    def _step_up_http(outcome: str) -> None:
+        if outcome == "not_found":
+            raise HTTPException(status_code=404, detail="device not found")
+        if outcome == "not_pending":
+            raise HTTPException(status_code=409, detail="device is not awaiting step-up")
+        if outcome == "expired":
+            raise HTTPException(status_code=410, detail="pending enrollment expired; enroll again")
 
     if admin_token:
         def _require_admin(authorization: str) -> None:
@@ -267,5 +341,12 @@ def create_app(
             _require_admin(authorization)
             if not service.revoke_device(device_id, body.reason):
                 raise HTTPException(status_code=404, detail="device not found")
+
+        @app.post("/v1/admin/devices/{device_id}/step-up-completion", status_code=204)
+        def admin_complete_step_up(device_id: str, body: StepUpCompletionBody,
+                                   authorization: str = Header(default="")) -> None:
+            """Support-desk completion after verifying the customer out of band."""
+            _require_admin(authorization)
+            _step_up_http(service.complete_step_up(device_id, body.method, actor="admin"))
 
     return app

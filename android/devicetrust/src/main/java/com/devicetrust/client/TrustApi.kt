@@ -135,6 +135,7 @@ object TrustJson {
             decisionId = json.getString("decisionId"),
             deviceId = if (json.isNull("deviceId")) null else json.optString("deviceId").ifEmpty { null },
             diagnostics = parseDiagnostics(json),
+            deviceStatus = json.optString("deviceStatus", "").takeIf { it == "active" || it == "pending" },
         )
     }
 }

@@ -17,11 +17,21 @@ from pathlib import Path
 
 from .attestation import AttestationEvidence
 from .evidence_history import snapshot
+from .lifecycle import (
+    BINDING_UNKNOWN,
+    EVENT_ENROLLED,
+    STATUS_ACTIVE,
+    STATUS_PENDING,
+    STATUS_REVOKED,
+    TRANSITIONS,
+)
 
-STATUS_ACTIVE = "active"
-STATUS_REVOKED = "revoked"
+__all__ = ["DeviceRegistry", "DeviceRecord", "DuplicateDeviceKey", "SchemaVersionError",
+           "STATUS_ACTIVE", "STATUS_PENDING", "STATUS_REVOKED", "SCHEMA_VERSION", "MIGRATIONS"]
 
-_SCHEMA = """
+# Base schema as of Runs 13/22. Migration 1 adopts databases created by any earlier
+# build (all at PRAGMA user_version 0) without assuming they are empty.
+_BASE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS devices (
     device_id        TEXT PRIMARY KEY,
     public_key_spki  BLOB NOT NULL,
@@ -72,8 +82,8 @@ CREATE INDEX IF NOT EXISTS fleet_events_network ON fleet_events (network, kind, 
 CREATE INDEX IF NOT EXISTS fleet_events_cohort ON fleet_events (cohort, kind, created_at);
 """
 
-# Columns added after Phase 1; applied in place to existing databases.
-_MIGRATIONS = (
+# Columns added after Phase 1, before versioned migrations existed.
+_LEGACY_COLUMNS = (
     ("confirm_key_spki", "BLOB"),
     ("confirm_evidence_json", "TEXT"),
     ("status", f"TEXT NOT NULL DEFAULT '{STATUS_ACTIVE}'"),
@@ -81,6 +91,52 @@ _MIGRATIONS = (
     ("revoke_reason", "TEXT"),
     ("last_action_at", "INTEGER"),
 )
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _add_columns(conn: sqlite3.Connection, table: str, columns) -> None:
+    existing = _columns(conn, table)
+    for column, decl in columns:
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
+def _migrate_1_adopt(conn: sqlite3.Connection) -> None:
+    """Adopt Phase 1, Run 13 and Run 22 databases (all user_version 0) or create fresh."""
+    for statement in _BASE_SCHEMA.split(";"):
+        if statement.strip():
+            conn.execute(statement)
+    _add_columns(conn, "devices", _LEGACY_COLUMNS)
+
+
+def _migrate_2_lifecycle(conn: sqlite3.Connection) -> None:
+    """Run 16: ownership, evidence binding and lifecycle events. Existing rows keep their status."""
+    _add_columns(conn, "devices", (
+        ("owner_tenant", "TEXT"),
+        ("owner_account", "TEXT"),
+        ("binding", f"TEXT NOT NULL DEFAULT '{BINDING_UNKNOWN}'"),
+        ("state_changed_at", "INTEGER"),
+    ))
+    conn.execute("CREATE INDEX IF NOT EXISTS devices_owner ON devices (owner_tenant, owner_account)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS lifecycle_events ("
+        " event_id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT NOT NULL, event TEXT NOT NULL,"
+        " from_status TEXT, to_status TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT, created_at REAL NOT NULL)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS lifecycle_events_device ON lifecycle_events (device_id, event_id)")
+
+
+# Ordered, append-only. Each step runs in its own transaction together with the
+# user_version bump, so a failure leaves the previous version intact.
+MIGRATIONS = ((1, _migrate_1_adopt), (2, _migrate_2_lifecycle))
+SCHEMA_VERSION = MIGRATIONS[-1][0]
+
+
+class SchemaVersionError(RuntimeError):
+    """The database was written by a newer build; refuse rather than guess."""
 
 
 class DuplicateDeviceKey(RuntimeError):
@@ -97,6 +153,10 @@ class DeviceRecord:
     evidence: dict
     confirm_evidence: dict | None
     play_signals: dict | None
+    owner_tenant: str | None = None
+    owner_account: str | None = None
+    binding: str = BINDING_UNKNOWN
+    state_changed_at: int | None = None
 
     @property
     def active(self) -> bool:
@@ -108,12 +168,35 @@ class DeviceRegistry:
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
         self._clock = clock
-        with self._lock, self._conn:
-            self._conn.executescript(_SCHEMA)
-            existing = {row[1] for row in self._conn.execute("PRAGMA table_info(devices)")}
-            for column, decl in _MIGRATIONS:
-                if column not in existing:
-                    self._conn.execute(f"ALTER TABLE devices ADD COLUMN {column} {decl}")
+        with self._lock:
+            self._migrate()
+
+    def _migrate(self) -> None:
+        conn = self._conn
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version > SCHEMA_VERSION:
+            raise SchemaVersionError(f"database schema {version} is newer than this build ({SCHEMA_VERSION})")
+        previous = conn.isolation_level
+        conn.isolation_level = None  # explicit transactions: DDL and the version bump commit together
+        try:
+            for target, step in MIGRATIONS:
+                if target <= version:
+                    continue
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    step(conn)
+                    conn.execute(f"PRAGMA user_version = {int(target)}")
+                    conn.execute("COMMIT")
+                except BaseException:
+                    conn.execute("ROLLBACK")
+                    raise
+                version = target
+        finally:
+            conn.isolation_level = previous
+
+    def schema_version(self) -> int:
+        with self._lock:
+            return self._conn.execute("PRAGMA user_version").fetchone()[0]
 
     def register(
         self,
@@ -122,15 +205,24 @@ class DeviceRegistry:
         play_signals: dict | None,
         confirm_key_spki: bytes | None = None,
         confirm_evidence: AttestationEvidence | None = None,
+        *,
+        status: str = STATUS_ACTIVE,
+        owner_tenant: str | None = None,
+        owner_account: str | None = None,
+        binding: str = BINDING_UNKNOWN,
     ) -> str:
+        if status not in (STATUS_ACTIVE, STATUS_PENDING):
+            raise ValueError("a new device is pending or active")
         measurement = snapshot(evidence, public_key_spki)
         device_id = "dev_" + secrets.token_urlsafe(18)
+        now = self._clock()
         try:
             with self._lock, self._conn:
                 self._conn.execute(
                     "INSERT INTO devices (device_id, public_key_spki, spki_sha256, enrolled_at, evidence_json,"
-                    " play_signals_json, confirm_key_spki, confirm_evidence_json, status)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " play_signals_json, confirm_key_spki, confirm_evidence_json, status, owner_tenant,"
+                    " owner_account, binding, state_changed_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         device_id,
                         public_key_spki,
@@ -140,11 +232,16 @@ class DeviceRegistry:
                         json.dumps(play_signals, sort_keys=True) if play_signals is not None else None,
                         confirm_key_spki,
                         json.dumps(asdict(confirm_evidence), sort_keys=True) if confirm_evidence else None,
-                        STATUS_ACTIVE,
+                        status,
+                        owner_tenant,
+                        owner_account,
+                        binding,
+                        int(now),
                     ),
                 )
                 self._conn.execute("INSERT INTO assurance_snapshots VALUES (?, ?, ?)",
                                    (device_id, json.dumps(measurement, sort_keys=True), self._clock()))
+                self._event(device_id, EVENT_ENROLLED, None, status, "system", binding, now)
         except sqlite3.IntegrityError as exc:
             raise DuplicateDeviceKey("attested key already enrolled") from exc
         return device_id
@@ -153,7 +250,8 @@ class DeviceRegistry:
         with self._lock:
             row = self._conn.execute(
                 "SELECT device_id, public_key_spki, confirm_key_spki, status, enrolled_at, evidence_json,"
-                " confirm_evidence_json, play_signals_json FROM devices WHERE device_id = ?",
+                " confirm_evidence_json, play_signals_json, owner_tenant, owner_account, binding,"
+                " state_changed_at FROM devices WHERE device_id = ?",
                 (device_id,),
             ).fetchone()
         if row is None:
@@ -167,16 +265,65 @@ class DeviceRegistry:
             evidence=json.loads(row[5]),
             confirm_evidence=json.loads(row[6]) if row[6] else None,
             play_signals=json.loads(row[7]) if row[7] else None,
+            owner_tenant=row[8],
+            owner_account=row[9],
+            binding=row[10] or BINDING_UNKNOWN,
+            state_changed_at=row[11],
         )
 
-    def revoke(self, device_id: str, reason: str) -> bool:
-        """Permanently revoke a device. Returns False if it does not exist."""
+    def _event(self, device_id, event, from_status, to_status, actor, reason, now) -> None:
+        """Caller holds the lock and an open transaction."""
+        self._conn.execute(
+            "INSERT INTO lifecycle_events (device_id, event, from_status, to_status, actor, reason, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (device_id, event, from_status, to_status, actor, (reason or "")[:64] or None, now),
+        )
+
+    def transition(self, device_id: str, event: str, actor: str, reason: str | None = None) -> str | None:
+        """Apply one legal lifecycle transition atomically.
+
+        Returns the new status, or None when the device is unknown or its current
+        status does not allow ``event`` (nothing is changed then).
+        """
+        allowed_from, to_status = TRANSITIONS[event]
+        now = self._clock()
         with self._lock, self._conn:
+            row = self._conn.execute("SELECT status FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+            if row is None or row[0] not in allowed_from:
+                return None
+            extra = ", revoked_at = ?, revoke_reason = ?" if to_status == STATUS_REVOKED else ""
+            params = [to_status, int(now)] + ([int(now), (reason or event)[:200]] if extra else []) + [device_id, row[0]]
             cur = self._conn.execute(
-                "UPDATE devices SET status = ?, revoked_at = ?, revoke_reason = ? WHERE device_id = ?",
-                (STATUS_REVOKED, int(self._clock()), reason[:200], device_id),
+                f"UPDATE devices SET status = ?, state_changed_at = ?{extra} WHERE device_id = ? AND status = ?",
+                params,
             )
-        return cur.rowcount == 1
+            if cur.rowcount != 1:
+                return None
+            self._event(device_id, event, row[0], to_status, actor, reason, now)
+        return to_status
+
+    def revoke(self, device_id: str, reason: str, actor: str = "admin") -> bool:
+        """Permanently revoke a device. True if it is now revoked; False if it does not exist."""
+        if self.transition(device_id, "revoked", actor, reason) is not None:
+            return True
+        record = self.get(device_id)
+        return record is not None and record.status == STATUS_REVOKED
+
+    def lifecycle_events(self, device_id: str, limit: int = 50) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event, from_status, to_status, actor, reason, created_at FROM lifecycle_events"
+                " WHERE device_id = ? ORDER BY event_id DESC LIMIT ?", (device_id, max(1, min(limit, 200))),
+            ).fetchall()
+        return [{"event": r[0], "from": r[1], "to": r[2], "actor": r[3], "reason": r[4], "at": r[5]} for r in rows]
+
+    def devices_for(self, tenant: str, account: str, limit: int = 50) -> list[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT device_id FROM devices WHERE owner_tenant = ? AND owner_account = ?"
+                " ORDER BY enrolled_at DESC LIMIT ?", (tenant, account, max(1, min(limit, 200))),
+            ).fetchall()
+        return [r[0] for r in rows]
 
     def touch(self, device_id: str) -> None:
         with self._lock, self._conn:

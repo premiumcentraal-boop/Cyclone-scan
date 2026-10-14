@@ -52,6 +52,11 @@ class TrustJsonTest {
 
     @Test
     fun parsesDecisions() {
+        val pending = TrustJson.parseEnrollment(
+            """{"decision":"STEP_UP","decisionId":"dec_p","deviceId":"dev_p","deviceStatus":"pending"}""")
+        assertEquals("pending", pending.deviceStatus)
+        assertEquals(null, TrustJson.parseEnrollment(
+            """{"decision":"ALLOW","decisionId":"d","deviceId":"x","deviceStatus":"weird"}""").deviceStatus)
         val allow = TrustJson.parseEnrollment("""{"decision":"ALLOW","decisionId":"dec_1","deviceId":"dev_1"}""")
         assertEquals(EnrollmentResult(Decision.ALLOW, "dec_1", "dev_1"), allow)
         val block = TrustJson.parseEnrollment("""{"decision":"BLOCK","decisionId":"dec_2"}""")

@@ -40,6 +40,13 @@ class ServerTest(private val activity: FragmentActivity, baseUrl: String) {
             enrolled.deviceId?.let { "device $it" + if (client.hasConfirmKey()) " · biometric key enrolled" else "" }
                 ?: "not enrolled", enrolled.diagnostics))
         if (enrolled.deviceId == null) return
+        if (enrolled.deviceStatus == "pending") {
+            // Run 16: pending devices cannot sign actions until the app's backend verifies the account owner.
+            onStep(ServerStep("Device status", "PENDING",
+                "enrolled, awaiting account step-up by the app's backend; protected actions are refused until then",
+                null))
+            return
+        }
 
         val login = client.signAction("login")
         val loginResult = api.verifyAction(login)

@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import NameOID
-from test_actions import Env
+from test_actions import ADMIN, Env
 
 from device_trust import reasons as R
 from device_trust.attestation import CHAIN_FACTORY, CHAIN_UNRECOGNIZED, CHAIN_RKP, AttestationVerifier, classify_chain
@@ -196,6 +196,12 @@ def test_leaked_keybox_posing_as_pixel_is_blocked_on_actions(policy):
     # Enrollment: kept for human review (STEP_UP), not silently allowed.
     assert data["decision"] == "STEP_UP"
     assert {"factor": "attestation_not_rkp_on_rkp_model", "points": 80} in data["risk"]["factors"]
+    # Run 16: a STEP_UP enrollment is pending until an authenticated completion.
+    assert data["deviceStatus"] == "pending"
+    assert env.action_challenge(phone.device_id).status_code == 404
+    assert env.client.post(f"/v1/admin/devices/{phone.device_id}/step-up-completion", json={"method": "SUPPORT_VERIFIED"},
+                           headers={"Authorization": f"Bearer {ADMIN}"}).status_code == 204
+    # Even after a human completes the step-up, every action is still scored on its own.
     out = env.verify(env.sign(phone, "payment", overrides={"signals": CLEAN}))
     assert out["decision"] == "BLOCK" and out["reasons"] == [R.RISK_BLOCK]
 

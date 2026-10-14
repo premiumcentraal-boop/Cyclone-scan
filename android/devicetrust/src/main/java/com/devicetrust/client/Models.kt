@@ -63,6 +63,11 @@ data class EnrollmentResult(
     val deviceId: String?,
     /** Only when the server runs with --expose-reasons (development). */
     val diagnostics: ServerDiagnostics? = null,
+    /**
+     * Run 16 lifecycle state of the enrolled device: "active", or "pending" until the
+     * app's backend completes an authenticated step-up. Null from older servers.
+     */
+    val deviceStatus: String? = null,
 )
 
 /** Reason codes and risk breakdown, returned only by development servers. */

@@ -59,6 +59,22 @@ class TrustPolicy:
     # Allow the confirm key to be unlocked with PIN/pattern as well as biometrics.
     confirm_key_allow_device_credential: bool = False
 
+    # Device lifecycle (Run 16) ----------------------------------------------
+    # Reject requests that do not carry an authenticated gateway principal
+    # (tenant + account). Recommended for any customer deployment.
+    require_principal: bool = False
+    # State for an otherwise-ALLOW enrollment without Run 20 evidence binding
+    # (legacy migration mode): "active" keeps the old behaviour, "pending"
+    # holds it until an authenticated step-up completion.
+    unbound_enrollment_state: str = "active"
+    # Quarantine: refuse protected actions from devices whose enrollment was not
+    # evidence-bound (LEGACY_UNBOUND or enrolled before Run 16), until they
+    # enroll again with binding.
+    require_bound_device: bool = False
+    # A pending device that is not completed within this time is revoked on the
+    # next completion attempt; the user enrolls again.
+    pending_ttl_seconds: int = 7 * 24 * 3600
+
     # Risk scoring (Phase 3) -------------------------------------------------
     risk: RiskPolicy = field(default_factory=RiskPolicy)
 
@@ -92,8 +108,13 @@ class TrustPolicy:
         return policy
 
     def validate(self) -> None:
-        if type(self.require_bound_enrollment) is not bool:
-            raise ValueError("require_bound_enrollment must be boolean")
+        for flag in ("require_bound_enrollment", "require_principal", "require_bound_device"):
+            if type(getattr(self, flag)) is not bool:
+                raise ValueError(f"{flag} must be boolean")
+        if self.unbound_enrollment_state not in ("active", "pending"):
+            raise ValueError("unbound_enrollment_state must be 'active' or 'pending'")
+        if type(self.pending_ttl_seconds) is not int or self.pending_ttl_seconds <= 0:
+            raise ValueError("pending_ttl_seconds must be a positive integer")
         if not self.package_name:
             raise ValueError("package_name is required")
         if not self.signing_cert_sha256:

@@ -30,6 +30,20 @@ from .attestation import AttestationEvidence, AttestationResult, AttestationVeri
 from .challenges import Challenge, ChallengeStore
 from .enrollment_proof import validate_proof
 from .key_description import AUTH_BIOMETRIC, AUTH_PASSWORD
+from .lifecycle import (
+    BINDING_BOUND,
+    BINDING_LEGACY_UNBOUND,
+    EVENT_PENDING_EXPIRED,
+    EVENT_REVOKED,
+    EVENT_STEP_UP_COMPLETED,
+    REVOKE_REASONS,
+    STATUS_ACTIVE,
+    STATUS_PENDING,
+    STATUS_REVOKED,
+    STEP_UP_METHODS,
+    Principal,
+    owns,
+)
 from .play_integrity import DecodeError, IntegrityTokenDecoder, b64url, enrollment_request_hash, evaluate_payload
 from .policy import TrustPolicy
 from .registry import DeviceRegistry, DuplicateDeviceKey
@@ -76,6 +90,8 @@ class EnrollmentDecision:
     play_signals: dict | None = field(default=None)
     has_confirm_key: bool = False
     risk: RiskResult | None = None
+    # Run 16: lifecycle status of the registered device ("active" / "pending").
+    device_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -140,15 +156,78 @@ class DeviceTrustService:
         self._play = play_decoder
         self._networks = NetworkHasher(policy.fleet_hash_key)
 
-    def issue_challenge(self) -> Challenge:
-        return self._challenges.issue()
+    def issue_challenge(self, principal: Principal | None = None) -> Challenge:
+        """Enrollment challenge, bound to the requesting principal when there is one."""
+        return self._challenges.issue(bound_to=principal.binding_key if principal else None)
 
-    def issue_action_challenge(self, device_id: str) -> Challenge | None:
-        """Challenge bound to one active device; None if unknown or revoked."""
+    def _owned(self, device_id: str, principal: Principal | None):
         record = self._registry.get(device_id)
+        if record is None or not owns(principal, record.owner_tenant, record.owner_account):
+            return None
+        return record
+
+    def issue_action_challenge(self, device_id: str, principal: Principal | None = None) -> Challenge | None:
+        """Challenge bound to one active device the principal owns; None otherwise (same answer for all)."""
+        if self.policy.require_principal and principal is None:
+            return None
+        record = self._owned(device_id, principal)
         if record is None or not record.active:
             return None
         return self._challenges.issue(bound_to=device_id, ttl_seconds=self.policy.action_challenge_ttl_seconds)
+
+    # --- lifecycle (Run 16) ---------------------------------------------------
+
+    def device_status(self, device_id: str, principal: Principal | None) -> dict | None:
+        """Minimal owner view: no evidence, no decisions, no backend reasons."""
+        record = self._owned(device_id, principal)
+        if record is None:
+            return None
+        return {"deviceId": record.device_id, "status": record.status, "binding": record.binding,
+                "hasConfirmKey": record.confirm_key_spki is not None}
+
+    def complete_step_up(self, device_id: str, method: str, *, principal: Principal | None = None,
+                         actor: str = "gateway") -> str:
+        """Authorised step-up completion: pending -> active.
+
+        The caller (authenticated gateway for the owning principal, or an
+        administrator) asserts that the account owner passed ``method``. This
+        does not create device-key proof that the enrollment lacked.
+        Returns "active", or "not_found" / "not_pending" / "expired".
+        """
+        if method not in STEP_UP_METHODS:
+            raise ValueError("unknown step-up method")
+        record = self._registry.get(device_id) if actor == "admin" else self._owned(device_id, principal)
+        if record is None:
+            return "not_found"
+        if record.status != STATUS_PENDING:
+            return "not_pending"
+        since = record.state_changed_at if record.state_changed_at is not None else record.enrolled_at
+        if self._registry_clock() - since > self.policy.pending_ttl_seconds:
+            self._registry.transition(device_id, EVENT_PENDING_EXPIRED, "system", "PENDING_TTL")
+            self._lifecycle_log(device_id, EVENT_PENDING_EXPIRED, "system")
+            return "expired"
+        if self._registry.transition(device_id, EVENT_STEP_UP_COMPLETED, actor, method) is None:
+            return "not_pending"
+        self._lifecycle_log(device_id, EVENT_STEP_UP_COMPLETED, actor)
+        return STATUS_ACTIVE
+
+    def revoke_owned_device(self, device_id: str, reason: str, principal: Principal | None) -> bool:
+        """Owner-initiated revocation (lost phone, user request) through the gateway."""
+        if reason not in REVOKE_REASONS:
+            raise ValueError("unknown revoke reason")
+        if self._owned(device_id, principal) is None:
+            return False
+        ok = self._registry.revoke(device_id, reason, actor="gateway")
+        self._lifecycle_log(device_id, EVENT_REVOKED, "gateway")
+        return ok
+
+    def _registry_clock(self) -> float:
+        return self._registry._clock()
+
+    @staticmethod
+    def _lifecycle_log(device_id: str, event: str, actor: str) -> None:
+        log.info(json.dumps({"event": "device_lifecycle", "device_id": device_id, "transition": event,
+                             "actor": actor}, sort_keys=True))
 
     def device_detail(self, device_id: str, limit: int = 50) -> dict | None:
         record = self._registry.get(device_id)
@@ -158,6 +237,10 @@ class DeviceTrustService:
         return {
             "deviceId": record.device_id,
             "status": record.status,
+            "binding": record.binding,
+            "owner": {"tenant": record.owner_tenant, "account": record.owner_account}
+            if record.owner_account is not None else None,
+            "lifecycle": self._registry.lifecycle_events(device_id),
             "enrolledAt": record.enrolled_at,
             "hasConfirmKey": record.confirm_key_spki is not None,
             "attested": {
@@ -186,13 +269,16 @@ class DeviceTrustService:
         return self._registry.fleet_summary(window_seconds or 24 * 3600, limit)
 
     def revoke_device(self, device_id: str, reason: str) -> bool:
-        revoked = self._registry.revoke(device_id, reason)
+        revoked = self._registry.revoke(device_id, reason, actor="admin")
         log.info(json.dumps({"event": "device_revoked", "device_id": device_id, "found": revoked, "reason": reason}))
         return revoked
 
-    def enroll(self, req: EnrollmentRequest, now: datetime | None = None) -> EnrollmentDecision:
+    def enroll(self, req: EnrollmentRequest, now: datetime | None = None,
+               principal: Principal | None = None) -> EnrollmentDecision:
         decision_id = "dec_" + secrets.token_urlsafe(12)
-        nonce = self._challenges.consume(req.challenge_id)
+        nonce = self._challenges.consume(req.challenge_id, bound_to=principal.binding_key if principal else None)
+        if self.policy.require_principal and principal is None:
+            return self._finish(decision_id, [R.PRINCIPAL_REQUIRED], [], None, None, None)
         if nonce is None:
             return self._finish(decision_id, [R.CHALLENGE_UNKNOWN], [], None, None, None)
 
@@ -267,9 +353,17 @@ class DeviceTrustService:
                 reasons.append(risk_reason)
 
         device_id = None
-        # STEP_UP enrollments are registered: the bank verifies the customer
-        # out-of-band, and every later action is still scored on its own.
-        if decide(reasons) != BLOCK:
+        device_status = None
+        # Run 16: STEP_UP enrollments are registered as *pending* and cannot act
+        # until an authenticated step-up completion; unbound legacy enrollments
+        # follow policy. The same attested key can never enroll twice, so a
+        # revoked identity is not revived by enrolling again.
+        verdict = decide(reasons)
+        if verdict != BLOCK:
+            binding = BINDING_BOUND if proof_ok else BINDING_LEGACY_UNBOUND
+            pending = verdict == STEP_UP or (
+                binding != BINDING_BOUND and self.policy.unbound_enrollment_state == STATUS_PENDING)
+            device_status = STATUS_PENDING if pending else STATUS_ACTIVE
             try:
                 device_id = self._registry.register(
                     att.leaf_public_key_spki,
@@ -277,11 +371,16 @@ class DeviceTrustService:
                     play_signals,
                     confirm_key_spki=confirm.leaf_public_key_spki if confirm else None,
                     confirm_evidence=confirm.evidence if confirm else None,
+                    status=device_status,
+                    owner_tenant=principal.tenant if principal else None,
+                    owner_account=principal.account if principal else None,
+                    binding=binding,
                 )
             except DuplicateDeviceKey:
                 reasons.append(R.KEY_ALREADY_ENROLLED)
+                device_status = None
         return self._finish(decision_id, reasons, warnings, device_id, att.evidence, play_signals,
-                            has_confirm_key=confirm is not None, risk=risk)
+                            has_confirm_key=confirm is not None, risk=risk, device_status=device_status)
 
     def _confirm_key_reasons(self, device: AttestationResult, confirm: AttestationResult) -> list[str]:
         if not confirm.ok or confirm.evidence is None or device.evidence is None:
@@ -321,17 +420,25 @@ class DeviceTrustService:
 
     # --- Phase 2: signed actions ---------------------------------------------
 
-    def verify_action(self, req: ActionRequest, now: datetime | None = None) -> ActionDecision:
+    def verify_action(self, req: ActionRequest, now: datetime | None = None,
+                      principal: Principal | None = None) -> ActionDecision:
         decision_id = "dec_" + secrets.token_urlsafe(12)
         reasons: list[str] = []
         warnings: list[str] = []
         # Burn the challenge first so it can never be retried, whatever happens next.
         nonce = self._challenges.consume(req.challenge_id, bound_to=req.device_id)
-        record = self._registry.get(req.device_id)
+        if self.policy.require_principal and principal is None:
+            return self._finish_action(decision_id, req, [R.PRINCIPAL_REQUIRED], warnings, None)
+        record = self._owned(req.device_id, principal)
         if record is None:
+            # Unknown and not-owned devices get the same answer.
             return self._finish_action(decision_id, req, [R.DEVICE_UNKNOWN], warnings, None)
-        if not record.active:
+        if record.status == STATUS_REVOKED:
             return self._finish_action(decision_id, req, [R.DEVICE_REVOKED], warnings, None)
+        if record.status == STATUS_PENDING:
+            return self._finish_action(decision_id, req, [R.DEVICE_PENDING], warnings, None)
+        if self.policy.require_bound_device and record.binding != BINDING_BOUND:
+            return self._finish_action(decision_id, req, [R.DEVICE_REBINDING_REQUIRED], warnings, None)
         if nonce is None:
             return self._finish_action(decision_id, req, [R.CHALLENGE_UNKNOWN], warnings, None)
 
@@ -448,7 +555,7 @@ class DeviceTrustService:
         return result
 
     def _finish(self, decision_id, reasons, warnings, device_id, evidence, play_signals,
-                has_confirm_key=False, risk=None) -> EnrollmentDecision:
+                has_confirm_key=False, risk=None, device_status=None) -> EnrollmentDecision:
         reasons_t = tuple(dict.fromkeys(reasons))
         # A step-up that could not be registered (e.g. duplicate key) is a block.
         verdict = decide(reasons_t)
@@ -468,6 +575,7 @@ class DeviceTrustService:
             play_signals=play_signals,
             has_confirm_key=has_confirm_key and device_id is not None,
             risk=risk,
+            device_status=device_status if device_id is not None else None,
         )
         log.info(
             json.dumps(

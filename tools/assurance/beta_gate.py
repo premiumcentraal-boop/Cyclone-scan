@@ -4,6 +4,7 @@ import json
 import math
 from .lab import CASES, _hex, _HEX40, _HEX64, read_document, summary
 from .calibration import evaluate
+from .evidence_json import read_json
 
 APPROVALS = {
     "candidate_ci", "integrated_claude_runs", "attestation_compatibility",
@@ -42,7 +43,7 @@ def validate_review(raw):
         raise ValueError("invalid score boundaries")
     for key in ("max_clean_intervention","max_altered_miss"):
         value=policy[key]
-        if type(value) not in (int,float) or not math.isfinite(value) or not 0<=value<=1:
+        if type(value) not in (int,float) or not 0<=value<=1 or not math.isfinite(value):
             raise ValueError("invalid acceptance rate")
     if type(policy["max_p95_ms"]) is not int or not 0<policy["max_p95_ms"]<=3600000:
         raise ValueError("invalid latency budget")
@@ -94,10 +95,7 @@ def main(argv=None):
     p.add_argument("lab");p.add_argument("review")
     args=p.parse_args(argv)
     try:
-        from pathlib import Path
-        path=Path(args.review)
-        if path.stat().st_size>65536:raise ValueError("review document too large")
-        result=check(read_document(args.lab),json.loads(path.read_text(encoding="utf-8")))
+        result=check(read_document(args.lab),read_json(args.review,65536))
         print(json.dumps(result,indent=2,allow_nan=False))
         return 0 if result["decision"]=="READY_FOR_HUMAN_REVIEW" else 1
     except (OSError,ValueError,TypeError) as exc:p.exit(2,str(exc)+"\n")
