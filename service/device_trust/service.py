@@ -195,7 +195,7 @@ class DeviceTrustService:
 
         att = self._verifier.verify(req.attestation_chain, nonce, req.reported_ids, now=now)
         reasons = list(att.reasons)
-        warnings: list[str] = []
+        warnings: list[str] = list(att.notes)
         play_signals = None
 
         if att.leaf_public_key_spki is not None:

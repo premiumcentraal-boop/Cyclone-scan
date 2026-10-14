@@ -5,13 +5,37 @@ revocation list produces a failure reason. Checks implemented:
 
 * chain signatures and issuer names, leaf -> root
 * root public key is a trusted Google attestation root
-* intermediates/root are inside their validity window
+* intermediates/root are inside their validity window (see "Validity")
 * no certificate in the chain is on Google's revocation list
 * exactly one certificate (the leaf) carries the KeyDescription extension,
   which blocks the "attested key signs a forged leaf" attack
+* the provisioning-information extension, when present, sits directly above
+  the leaf
+* the KeyMint security level matches the level the Google-signed chain claims
 * challenge, security level, verified boot, bootloader lock, key origin,
   app package + signing certificate, OS patch age
 * attested device IDs (brand/model/...) match what the app reports
+
+Supported chain forms (Run 15; same shapes as Google's android/keyattestation
+reference verifier):
+
+* RKP: leaf <- per-device attestation key <- "Droid CA3" <- "Droid CA2" <- root
+* FACTORY: leaf <- attestation key <- factory intermediate (subject carries a
+  serialNumber) <- root
+
+Any other shape under a trusted root is reported as UNRECOGNIZED: it is not
+silently assumed to be a factory keybox, it never receives the legacy
+validity exemption, and risk scoring treats it as "not RKP" exactly as before.
+ATTEST_KEY chains (a second KeyDescription above the leaf) are unsupported
+and rejected as ATTESTATION_EXTENSION_MISPLACED, as in the reference.
+
+Validity: the leaf's validity is device-defined and ignored. Every other
+certificate must be in date, except that Google says expired certificates in
+factory-provisioned chains under its RSA root (subject serialNumber
+f92009e853b6b045) remain trustworthy unless revoked. Only that exact form gets
+the exemption (policy ``legacy_factory_validity_exemption``); not-yet-valid
+certificates and all RKP certificates are always enforced, and revocation is
+always checked.
 """
 
 from __future__ import annotations
@@ -42,7 +66,12 @@ MAX_CHAIN_LENGTH = 10
 
 CHAIN_RKP = "RKP"
 CHAIN_FACTORY = "FACTORY"
+CHAIN_UNRECOGNIZED = "UNRECOGNIZED"
 _GOOGLE_RKP_INTERMEDIATES = ("Droid CA2", "Droid CA3")
+# Subject serialNumber of Google's RSA attestation root (the legacy factory root).
+LEGACY_RSA_ROOT_SERIAL = "f92009e853b6b045"
+PROVISIONING_INFO_OID = "1.3.6.1.4.1.11129.2.1.30"
+_PROVISIONING_INFO = x509.ObjectIdentifier(PROVISIONING_INFO_OID)
 
 
 def _cn_and_org(cert: x509.Certificate) -> tuple[str | None, str | None]:
@@ -53,14 +82,29 @@ def _cn_and_org(cert: x509.Certificate) -> tuple[str | None, str | None]:
     return first(x509.NameOID.COMMON_NAME), first(x509.NameOID.ORGANIZATION_NAME)
 
 
+def _subject_values(cert: x509.Certificate, oid) -> list[str]:
+    return [a.value for a in cert.subject.get_attributes_for_oid(oid)]
+
+
+def _has_extension(cert: x509.Certificate, oid) -> bool:
+    try:
+        cert.extensions.get_extension_for_oid(oid)
+        return True
+    except x509.ExtensionNotFound:
+        return False
+
+
 def classify_chain(certs: list[x509.Certificate]) -> str:
-    """RKP vs factory keybox, from the *structure* of an already-verified chain.
+    """RKP, FACTORY or UNRECOGNIZED, from the *structure* of an already-verified chain.
 
     RKP chains are exactly: leaf <- per-device key <- "Droid CA3" <- "Droid CA2"
     <- Google root, with each link verified. Only Google holds the Droid CA
     keys, so a leaked factory keybox cannot produce this shape: a fake
     "Droid CA3" signed by a keybox would sit at the wrong position with the
-    wrong issuer. Callers must have verified signatures first.
+    wrong issuer. FACTORY chains are exactly leaf <- attestation key <-
+    intermediate whose subject has a serialNumber <- root, with no
+    provisioning-information extension. Anything else is UNRECOGNIZED rather
+    than guessed. Callers must have verified signatures first.
     """
     if len(certs) == 5:
         ca3, ca2 = certs[2], certs[3]
@@ -72,7 +116,40 @@ def classify_chain(certs: list[x509.Certificate]) -> str:
             and ca2.issuer == certs[4].subject
         ):
             return CHAIN_RKP
-    return CHAIN_FACTORY
+    if (
+        len(certs) == 4
+        and _subject_values(certs[2], x509.NameOID.SERIAL_NUMBER)
+        and certs[1].issuer == certs[2].subject
+        and certs[2].issuer == certs[3].subject
+        and not any(_has_extension(c, _PROVISIONING_INFO) for c in certs)
+    ):
+        return CHAIN_FACTORY
+    return CHAIN_UNRECOGNIZED
+
+
+def chain_security_claim(certs: list[x509.Certificate], chain_type: str) -> str | None:
+    """Security level the Google-signed part of the chain claims, as in the reference verifier.
+
+    RKP attestation certificates carry O=TEE or O=StrongBox. Only StrongBox
+    factory chains are guaranteed to say so (CTS), so a factory TEE chain
+    claims nothing (None). Unrecognized chains claim nothing.
+    """
+    if chain_type == CHAIN_RKP:
+        org = _cn_and_org(certs[1])[1]
+        return {"TEE": "TRUSTED_ENVIRONMENT", "StrongBox": "STRONG_BOX"}.get(org or "", "SOFTWARE")
+    if chain_type == CHAIN_FACTORY:
+        names = (certs[1].subject.rfc4514_string() + " " + certs[2].subject.rfc4514_string()).lower()
+        return "STRONG_BOX" if "strongbox" in names else None
+    return None
+
+
+def security_level_matches_chain(keymint_level: str, claim: str | None) -> bool:
+    """MATCHES_CERTIFICATE from android/keyattestation's ConstraintConfig."""
+    if keymint_level == "STRONG_BOX":
+        return claim == "STRONG_BOX"
+    if keymint_level == "TRUSTED_ENVIRONMENT":
+        return claim in (None, "TRUSTED_ENVIRONMENT")
+    return claim in (None, "SOFTWARE")
 _KEY_DESCRIPTION = x509.ObjectIdentifier(KEY_DESCRIPTION_OID)
 
 
@@ -104,6 +181,9 @@ class AttestationEvidence:
     chain_type: str = "UNKNOWN"
     # SHA-256 of the SubjectPublicKeyInfo of the key that signed the leaf.
     attestation_key_sha256: str | None = None
+    # Run 15: True when an expired certificate was accepted under Google's
+    # legacy factory-chain guidance (see module docstring).
+    legacy_validity_exemption: bool = False
 
 
 @dataclass(frozen=True)
@@ -112,6 +192,9 @@ class AttestationResult:
     evidence: AttestationEvidence | None = None
     # DER SubjectPublicKeyInfo of the attested key (used for device binding).
     leaf_public_key_spki: bytes | None = field(default=None, repr=False)
+    # Run 15: non-blocking explanations (unrecognized chain form, legacy
+    # validity exemption). Callers surface them as warnings.
+    notes: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -153,11 +236,19 @@ class AttestationVerifier:
         if len(certs) < 2:
             return AttestationResult((R.CHAIN_MALFORMED,))
 
+        # Google: only the occurrence nearest the root can be trusted. Requiring that
+        # occurrence to be the leaf (and the only one) is the reference verifier's rule;
+        # it also rejects ATTEST_KEY chains, which are not supported.
         ext_positions = [i for i, c in enumerate(certs) if _has_key_description(c)]
         if not ext_positions:
             return AttestationResult((R.ATTESTATION_EXTENSION_MISSING,))
         if ext_positions != [0]:
             return AttestationResult((R.ATTESTATION_EXTENSION_MISPLACED,))
+        # If present, provisioning information must be in the certificate
+        # immediately above the one carrying the KeyDescription.
+        info_positions = [i for i, c in enumerate(certs) if _has_extension(c, _PROVISIONING_INFO)]
+        if info_positions and info_positions != [1]:
+            return AttestationResult((R.PROVISIONING_INFO_MISPLACED,))
 
         # --- cryptographic chain -------------------------------------------
         for child, issuer in zip(certs, certs[1:]):
@@ -170,12 +261,30 @@ class AttestationVerifier:
             return AttestationResult((R.ROOT_UNTRUSTED,))
 
         failures: list[str] = []
+        notes: list[str] = []
+        chain_type = classify_chain(certs)
+        if chain_type == CHAIN_UNRECOGNIZED:
+            notes.append(R.ATTESTATION_CHAIN_UNRECOGNIZED)
+        legacy_ok = (
+            self._policy.legacy_factory_validity_exemption
+            and chain_type == CHAIN_FACTORY
+            and LEGACY_RSA_ROOT_SERIAL in _subject_values(root, x509.NameOID.SERIAL_NUMBER)
+        )
+        exempted = False
         skew = timedelta(seconds=self._policy.clock_skew_seconds)
         # Leaf validity is device-clock/keystore-defined and not meaningful.
         for cert in certs[1:]:
-            if cert.not_valid_before_utc - skew > now or cert.not_valid_after_utc + skew < now:
+            if cert.not_valid_before_utc - skew > now:
                 failures.append(R.CERT_EXPIRED)
                 break
+            if cert.not_valid_after_utc + skew < now:
+                if legacy_ok:
+                    exempted = True
+                    continue
+                failures.append(R.CERT_EXPIRED)
+                break
+        if exempted:
+            notes.append(R.LEGACY_FACTORY_VALIDITY_EXEMPT)
 
         try:
             if any(self._revocations.status(c.serial_number) for c in certs):
@@ -191,7 +300,10 @@ class AttestationVerifier:
             return AttestationResult(tuple(failures + [R.ATTESTATION_EXTENSION_MALFORMED]))
 
         failures.extend(self._check_contents(kd, expected_challenge, now))
-        chain_type = classify_chain(certs)
+        if chain_type != CHAIN_UNRECOGNIZED and not security_level_matches_chain(
+            kd.keymint_security_level.name, chain_security_claim(certs, chain_type)
+        ):
+            failures.append(R.SECURITY_LEVEL_CHAIN_MISMATCH)
         if self._policy.require_rkp and chain_type != CHAIN_RKP:
             failures.append(R.ATTESTATION_NOT_RKP)
         mismatched = _compare_ids(kd.hardware_enforced.attested_ids, reported_ids or {})
@@ -203,11 +315,13 @@ class AttestationVerifier:
             _evidence(kd, mismatched, leaf_spki, root),
             chain_type=chain_type,
             attestation_key_sha256=hashlib.sha256(spki_der(certs[1])).hexdigest(),
+            legacy_validity_exemption=exempted,
         )
         return AttestationResult(
             tuple(dict.fromkeys(failures)),
             evidence,
             leaf_spki,
+            tuple(notes),
         )
 
     def _check_contents(self, kd: KeyDescription, challenge: bytes, now: datetime) -> list[str]:

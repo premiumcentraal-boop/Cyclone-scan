@@ -3848,6 +3848,85 @@
   {
    "evidence": {
     "attestation_security_level": "STRONG_BOX",
+    "attested_ids": {
+     "brand": "google",
+     "model": "Pixel 9 Pro"
+    },
+    "boot_patch_level": 20260905,
+    "chain_type": "UNRECOGNIZED",
+    "os_patch_level": 202609,
+    "os_version": 160000,
+    "vendor_patch_level": 20260905
+   },
+   "expected": {
+    "band": "BLOCK",
+    "factors": [
+     [
+      "attestation_not_rkp_on_rkp_model",
+      80
+     ],
+     [
+      "attestation_factory_keybox_modern_os",
+      10
+     ]
+    ],
+    "score": 90
+   },
+   "name": "unrecognized_chain_on_pixel",
+   "reported": null,
+   "signals": {
+    "app_installer": "com.android.vending",
+    "app_signature_sha256": "abababababababababababababababababababababababababababababababab",
+    "debug_app_debuggable": false,
+    "debug_attached": false,
+    "debug_traced": false,
+    "emu_build": false,
+    "emu_files": false,
+    "env_a11y_third_party": 0,
+    "env_adb": false,
+    "env_dev_options": false,
+    "env_external_display": false,
+    "env_in_call": false,
+    "env_remote_access_a11y": false,
+    "env_remote_access_apps": [],
+    "env_vpn": false,
+    "hook_frida": false,
+    "hook_frida_port": false,
+    "hook_xposed": false,
+    "hook_zygisk": false,
+    "native_code_modified": false,
+    "native_code_modified_status": "NOT_DETECTED",
+    "native_debug_traced": false,
+    "native_debug_traced_status": "NOT_DETECTED",
+    "native_hook_frida": false,
+    "native_hook_frida_status": "NOT_DETECTED",
+    "native_hook_xposed": false,
+    "native_hook_xposed_status": "NOT_DETECTED",
+    "native_hook_zygisk": false,
+    "native_hook_zygisk_status": "NOT_DETECTED",
+    "native_kotlin_mismatch": false,
+    "native_kotlin_mismatch_status": "NOT_DETECTED",
+    "native_root_magisk": false,
+    "native_root_magisk_status": "NOT_DETECTED",
+    "native_root_su": false,
+    "native_root_su_status": "NOT_DETECTED",
+    "native_root_system_rw": false,
+    "native_root_system_rw_status": "NOT_DETECTED",
+    "native_selinux_permissive": false,
+    "native_selinux_permissive_status": "NOT_DETECTED",
+    "os_release": "16",
+    "os_security_patch": "2026-09-05",
+    "root_apps": false,
+    "root_magisk": false,
+    "root_su": false,
+    "root_system_rw": false,
+    "root_test_keys": false,
+    "v": 1
+   }
+  },
+  {
+   "evidence": {
+    "attestation_security_level": "STRONG_BOX",
     "attested_ids": {},
     "boot_patch_level": 20260905,
     "chain_type": "FACTORY",

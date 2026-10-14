@@ -16,7 +16,7 @@ from cryptography.x509.oid import NameOID
 from test_actions import Env
 
 from device_trust import reasons as R
-from device_trust.attestation import CHAIN_FACTORY, CHAIN_RKP, AttestationVerifier, classify_chain
+from device_trust.attestation import CHAIN_FACTORY, CHAIN_UNRECOGNIZED, CHAIN_RKP, AttestationVerifier, classify_chain
 from device_trust.policy import TrustPolicy
 from device_trust.revocation import RevocationList
 from device_trust.risk import RiskInput, RiskPolicy, assess
@@ -67,7 +67,8 @@ def test_fake_droid_ca_signed_by_a_keybox_is_not_rkp():
     dev = _cert("deadbeef", "TEE", fake_ca3, k_dev, k3, days=20)
     leaf, _ = make_leaf(pki, KD())  # leaf content irrelevant here
     chain = [leaf, dev, fake_ca3, pki.inter, pki.root]
-    assert classify_chain(chain) == CHAIN_FACTORY
+    # Run 15: not RKP, and no longer silently called a factory keybox either.
+    assert classify_chain(chain) == CHAIN_UNRECOGNIZED
 
 
 def test_rkp_shape_is_recognised_structurally():
@@ -79,8 +80,8 @@ def test_rkp_shape_is_recognised_structurally():
     leaf = _cert("Android Keystore Key", "x", dev, ec.generate_private_key(ec.SECP256R1()), kd, ca=False)
     assert classify_chain([leaf, dev, ca3, ca2, root]) == CHAIN_RKP
     # Same certs, wrong order/length -> not RKP.
-    assert classify_chain([leaf, dev, ca2, ca3, root]) == CHAIN_FACTORY
-    assert classify_chain([leaf, dev, ca3, ca2]) == CHAIN_FACTORY
+    assert classify_chain([leaf, dev, ca2, ca3, root]) == CHAIN_UNRECOGNIZED
+    assert classify_chain([leaf, dev, ca3, ca2]) == CHAIN_UNRECOGNIZED
 
 
 def _verify_real(name, policy):

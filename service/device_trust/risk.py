@@ -347,7 +347,9 @@ def device_model_key(evidence: dict, reported: dict | None) -> str | None:
 
 
 def _provenance_factors(e: dict, inp: RiskInput, policy: RiskPolicy) -> list[str]:
-    if e.get("chain_type") != "FACTORY":
+    # UNRECOGNIZED chains (Run 15) were labelled FACTORY before; they keep the same
+    # "not RKP" factors so scores do not change, but are no longer called factory keyboxes.
+    if e.get("chain_type") not in ("FACTORY", "UNRECOGNIZED"):
         return []
     out = []
     if device_model_key(e, inp.reported_ids) in policy.rkp_required_models:

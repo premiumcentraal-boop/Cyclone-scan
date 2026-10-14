@@ -157,7 +157,8 @@ def test_play_outage_is_warning_when_not_required(policy, pki):
     client, _ = build(policy, pki, decoder=FakeDecoder(fail=True))
     data = device_enroll(client, pki, play=True)[0].json()
     assert data["decision"] == "ALLOW"
-    assert data["warnings"] == [R.PLAY_INTEGRITY_UNAVAILABLE]
+    # The synthetic 3-certificate test chain is not a supported real-world form (Run 15).
+    assert data["warnings"] == [R.ATTESTATION_CHAIN_UNRECOGNIZED, R.PLAY_INTEGRITY_UNAVAILABLE]
 
 
 def test_play_outage_blocks_when_required(policy, pki):

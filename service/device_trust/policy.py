@@ -30,6 +30,10 @@ class TrustPolicy:
     # defence against leaked factory keyboxes, but rejects older phones that
     # only have factory keys; the risk engine's model list is the softer default.
     require_rkp: bool = False
+    # Run 15: follow Google's guidance that expired certificates in factory
+    # chains under its RSA root stay trustworthy unless revoked. Only that exact
+    # chain form is exempt; set False to enforce validity everywhere.
+    legacy_factory_validity_exemption: bool = True
     # Secret for hashing client network blocks (Run 12). Set it so fleet
     # history survives restarts; without it a random per-process key is used.
     fleet_hash_key: str = ""
