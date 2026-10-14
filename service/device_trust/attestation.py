@@ -181,6 +181,7 @@ class AttestationEvidence:
     chain_type: str = "UNKNOWN"
     # SHA-256 of the SubjectPublicKeyInfo of the key that signed the leaf.
     attestation_key_sha256: str | None = None
+    verified_boot_hash: str | None = None
     # Run 15: True when an expired certificate was accepted under Google's
     # legacy factory-chain guidance (see module docstring).
     legacy_validity_exemption: bool = False
@@ -399,6 +400,7 @@ def _evidence(kd: KeyDescription, mismatched, leaf_spki: bytes, root: x509.Certi
         device_locked=rot.device_locked if rot else None,
         verified_boot_state=rot.verified_boot_state.name if rot else None,
         verified_boot_key_sha256=hashlib.sha256(rot.verified_boot_key).hexdigest() if rot else None,
+        verified_boot_hash=rot.verified_boot_hash.hex() if rot and rot.verified_boot_hash and len(rot.verified_boot_hash) <= 64 else None,
         os_version=hw.os_version,
         os_patch_level=hw.os_patch_level,
         vendor_patch_level=hw.vendor_patch_level,

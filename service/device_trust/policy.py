@@ -40,6 +40,7 @@ class TrustPolicy:
 
     # Challenge / Play Integrity --------------------------------------------
     challenge_ttl_seconds: int = 120
+    require_bound_enrollment: bool = False
     require_play_integrity: bool = False
     play_integrity_max_age_seconds: int = 300
     require_play_recognized: bool = True
@@ -91,6 +92,8 @@ class TrustPolicy:
         return policy
 
     def validate(self) -> None:
+        if type(self.require_bound_enrollment) is not bool:
+            raise ValueError("require_bound_enrollment must be boolean")
         if not self.package_name:
             raise ValueError("package_name is required")
         if not self.signing_cert_sha256:

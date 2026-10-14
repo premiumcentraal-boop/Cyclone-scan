@@ -46,6 +46,8 @@ object TrustJson {
             put("confirmKeyChain", JSONArray(chain.map { b64.encodeToString(it) }))
         }
         request.signals?.let { put("signals", it) }
+        request.evidenceData?.let { put("evidenceData", b64.encodeToString(it)) }
+        request.evidenceSignature?.let { put("evidenceSignature", b64.encodeToString(it)) }
         put(
             "device",
             JSONObject().apply {

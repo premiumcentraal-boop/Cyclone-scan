@@ -1,4 +1,5 @@
 #include "dt_checks.h"
+#include "dt_elf.h"
 #include "dt_io.h"
 #include <jni.h>
 #include <stdio.h>
@@ -6,26 +7,13 @@
 #include <pthread.h>
 #include <stdint.h>
 
-/* Only known, owned compiled functions are read, never caller-supplied addresses.
- * These functions exceed 16 bytes on the supported ABIs (verified by CI symbol-size checks).
- * On-load evidence detects later modification; it cannot attest a clean initial load. */
-#define BASELINE_BYTES 16
-static unsigned char baseline[3][BASELINE_BYTES];
-static const void *const owned[] = {(const void *)dt_collect, (const void *)dt_read, (const void *)dt_tracer};
-static const unsigned char *code_address(size_t i) {
-    uintptr_t address = (uintptr_t)owned[i];
-#if defined(__arm__)
-    address &= ~(uintptr_t)1;
-#endif
-    return (const unsigned char *)address;
-}
-static int baseline_ready;
+/* All readable executable segments of this library are measured after relocation.
+ * Owned module only. Initial cleanliness is not established by this baseline. */
+static struct dt_elf_baseline executable_baseline;
 static pthread_mutex_t scan_lock = PTHREAD_MUTEX_INITIALIZER;
-
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     (void)vm; (void)reserved;
-    for (size_t i = 0; i < 3; ++i) memcpy(baseline[i], code_address(i), BASELINE_BYTES);
-    baseline_ready = 1;
+    (void)dt_elf_capture(&executable_baseline, (const void *)dt_collect);
     return JNI_VERSION_1_6;
 }
 JNIEXPORT jstring JNICALL Java_com_devicetrust_client_signals_JniNativeProbe_scanRaw(JNIEnv *env, jobject self) {
@@ -34,12 +22,7 @@ JNIEXPORT jstring JNICALL Java_com_devicetrust_client_signals_JniNativeProbe_sca
     struct dt_probe probe = {dt_read, dt_exists};
     struct dt_result result;
     dt_collect(&probe, &result);
-    if (baseline_ready) {
-        int changed = 0;
-        for (size_t i = 0; i < 3; ++i)
-            changed |= dt_code_changed(baseline[i], code_address(i), BASELINE_BYTES);
-        result.states[DT_CODE] = changed ? DT_DETECTED : DT_NOT_DETECTED;
-    }
+    result.states[DT_CODE] = dt_elf_check(&executable_baseline);
     char json[2048]; size_t used = 0;
     int n = snprintf(json, sizeof(json), "{");
     if (n < 0) { pthread_mutex_unlock(&scan_lock); return NULL; }
