@@ -87,3 +87,7 @@ def test_proof_policy_rejects_string_boolean(policy):
     with pytest.raises(ValueError):
         TrustPolicy.from_dict({"package_name": "p", "signing_cert_sha256": ["ab"*32],
                                "require_bound_enrollment": "false"})
+
+
+def test_hash_matches_android_vector():
+    assert proof_request_hash(b'{"v":1}') == "2ReoUCmfQoCmaFDJhLAbN6NQFmVm5f66IznA6C-LWL8"
