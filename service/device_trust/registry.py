@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .attestation import AttestationEvidence
+from .evidence_history import snapshot
 
 STATUS_ACTIVE = "active"
 STATUS_REVOKED = "revoked"
@@ -29,6 +30,12 @@ CREATE TABLE IF NOT EXISTS devices (
     evidence_json    TEXT NOT NULL,
     play_signals_json TEXT
 );
+CREATE TABLE IF NOT EXISTS assurance_snapshots (
+    device_id TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS assurance_snapshots_device_time ON assurance_snapshots(device_id, created_at);
 CREATE TABLE IF NOT EXISTS decisions (
     decision_id   TEXT PRIMARY KEY,
     device_id     TEXT,
@@ -116,6 +123,7 @@ class DeviceRegistry:
         confirm_key_spki: bytes | None = None,
         confirm_evidence: AttestationEvidence | None = None,
     ) -> str:
+        measurement = snapshot(evidence, public_key_spki)
         device_id = "dev_" + secrets.token_urlsafe(18)
         try:
             with self._lock, self._conn:
@@ -135,6 +143,8 @@ class DeviceRegistry:
                         STATUS_ACTIVE,
                     ),
                 )
+                self._conn.execute("INSERT INTO assurance_snapshots VALUES (?, ?, ?)",
+                                   (device_id, json.dumps(measurement, sort_keys=True), self._clock()))
         except sqlite3.IntegrityError as exc:
             raise DuplicateDeviceKey("attested key already enrolled") from exc
         return device_id
@@ -289,6 +299,14 @@ class DeviceRegistry:
             "cohorts": [{"cohort": c, "enrollments": e} for c, e in cohorts],
             "attestationKeys": [{"key": k[:16], "enrollments": e, "models": m} for k, e, m in keys],
         }
+
+    def assurance_history(self, device_id: str, limit: int = 20) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT snapshot_json, created_at FROM assurance_snapshots WHERE device_id = ? "
+                "ORDER BY created_at DESC LIMIT ?", (device_id, max(1, min(limit, 100))),
+            ).fetchall()
+        return [{"evidence": json.loads(row[0]), "at": row[1]} for row in rows]
 
     def count(self) -> int:
         with self._lock:
