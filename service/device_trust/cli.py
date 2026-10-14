@@ -48,8 +48,16 @@ def cmd_serve(args: argparse.Namespace) -> int:
         admin_token = Path(args.admin_token_file).read_text(encoding="utf-8").strip()
         if len(admin_token) < 32:
             raise SystemExit("admin token must be at least 32 characters")
-    app = create_app(build_service(args), expose_reasons=args.expose_reasons, admin_token=admin_token,
-                     trust_forwarded_for=args.trust_forwarded_for)
+    gateway_token = None
+    if args.gateway_token_file:
+        gateway_token = Path(args.gateway_token_file).read_text(encoding="utf-8").strip()
+        if len(gateway_token) < 32:
+            raise SystemExit("gateway token must be at least 32 characters")
+    service = build_service(args)
+    if service.policy.require_principal and not gateway_token:
+        raise SystemExit("policy requires a principal but --gateway-token-file was not given")
+    app = create_app(service, expose_reasons=args.expose_reasons, admin_token=admin_token,
+                     trust_forwarded_for=args.trust_forwarded_for, gateway_token=gateway_token)
     uvicorn.run(app, host=args.host, port=args.port)
     return 0
 
@@ -91,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8080)
     serve.add_argument("--expose-reasons", action="store_true",
                        help="return failure reasons to callers (development only)")
+    serve.add_argument("--gateway-token-file",
+                       help="file with the shared secret the customer's authenticated backend sends as "
+                            "X-Gateway-Authorization; enables principal ownership and /v1/devices endpoints")
     serve.add_argument("--admin-token-file",
                        help="file holding the bearer token for /v1/admin endpoints (disabled if omitted)")
     serve.add_argument("--trust-forwarded-for", action="store_true",

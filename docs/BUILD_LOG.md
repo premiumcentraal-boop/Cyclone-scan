@@ -9,8 +9,8 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 13 baseline | CI_PASSED | d4667c169a3f1fc2475be940390ec69429c92b06 | PR #6; CI 38482579680 | UNVERIFIED | Scanner 0.6.0; 282 Python tests; 58 vectors |
 | 14 report coverage | CI_PASSED | d4667c1 → 63fd3bd | PR #8 (ready for review); CI 38646802172 | UNVERIFIED | Scanner 0.7.0; 303 Python tests; 59 vectors |
 | 15 verifier compatibility | CI_PASSED | 63fd3bd → 3d68781 | PR #14; CI 38648998069 | UNVERIFIED | 335 Python tests; 60 risk + 14 attestation vectors |
-| 15b integrate Runs 20–25 | IMPLEMENTED | 69e3bc5 + 2cd8d99 | see entry | UNVERIFIED | Merge of the parallel stack |
-| 16 device lifecycle | PLANNED | Run 15b successor | Not created | Not executed | Pending/approval/ownership |
+| 15b integrate Runs 20–25 | CI_PASSED | 69e3bc5 + 2cd8d99 → 04996b5 | PR #15; CI 38650877770 | UNVERIFIED | Merge of the parallel stack; 390 Python tests |
+| 16 device lifecycle | IMPLEMENTED | 04996b5 → see entry | see entry | UNVERIFIED | States, ownership, migrations |
 | 17 server scan/history | PLANNED | Run 16 successor | Not created | Not executed | External Google setup may be needed |
 | 18 beta packaging | PLANNED | Run 17 successor | Not created | Not executed | Stable signing setup dependency |
 | 19 beta validation | PLANNED | Run 18 successor | Not created | Not executed | Normal-device matrix |
@@ -58,9 +58,23 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 A separate stack of draft PRs from the owner's account branches from Run 13 in parallel with this delegation: #7 Run 20 (`run-20-protocol-assurance`) → #9 Run 21 → #10 Run 22 → #11 Run 23 → #12 Run 24 → #13 Run 25 (`run-25-beta-evidence-gate`), opened 14 October 22:06–22:18 UTC. This delegation has not read, changed or rebased those branches. Both stacks modify code from the same Run 13 base, so the owner needs to choose an integration order before merging; topics may overlap with Runs 16–19 (e.g. protocol assurance, evidence history, lab evidence).
 
 ### Run 15b — Integrate Runs 20–25
-- State: IMPLEMENTED (CI recorded below once available)
+- State: CI_PASSED — https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38650877770 (all jobs incl. new enrollment-transcript step)
 - Inputs: Run 15 head 69e3bc591c4a9a94da3855c388ad87cbefd1fb70 + `run-25-beta-evidence-gate` 2cd8d99936a9b7c11a96c1b157342c10fb670757 (contains Runs 20–24). Agreement: Codex reply on PR #14 (15 October 2026); one merge commit, ancestry preserved, neither original stack force-updated, not for merge to main.
 - Conflicts resolved: `attestation.py` (keep both evidence fields `verified_boot_hash` and `legacy_validity_exemption`), `reasons.py` (keep both code groups), `tests/test_api.py` (warnings now `ATTESTATION_CHAIN_UNRECOGNIZED`, `ENROLLMENT_LEGACY_UNBOUND`, `PLAY_INTEGRITY_UNAVAILABLE`). CI keeps every step from both stacks.
 - Integration additions: SDK test `EnrollmentCoverageFixtureTest` writes maximum-size Run 20 transcripts carrying full Run 14 coverage (detected and all-unavailable, with nulls); CI checks them with the server's strict parser, transcript field set and signal validator (`tools/check_enrollment_fixtures.py`). History snapshots gain additive v1 metadata `verifier_ruleset` and `legacy_validity_exemption` (missing in older snapshots = unknown).
 - Checks run locally: 390 Python tests passed; risk (60) and attestation (14) vectors unchanged. Simulated max transcript: 6.7 KiB of 32 KiB.
 - Build-status note: this log is authoritative; Runs 20–25 scope and handoff live in [assurance/BUILD_STATUS.md](assurance/BUILD_STATUS.md).
+
+### Run 16 — Enrollment and device lifecycle
+- State: IMPLEMENTED (CI recorded below once available)
+- Started/completed: 15 October 2026 / —
+- Exact base SHA: 04996b51fc7f691e43e3412f1ce7b7abb6a5bac9 (`run-15b-integrate-20-25`, PR #15)
+- Head SHA: —
+- Branch / PR: `run-16-device-lifecycle` → base `run-15b-integrate-20-25`; PR —
+- Changes delivered: see [RUN_16_DEVICE_LIFECYCLE.md](RUN_16_DEVICE_LIFECYCLE.md)
+- Automated checks actually run: local Python 3.13 `python -m pytest service/tests` → 408 passed (390 + 18 new); vectors unchanged. Android: PR CI only.
+- CI URL and outcome: —
+- Physical device / OS / app version: none (UNVERIFIED)
+- Migration implications: user_version 0 databases (Phase 1, Run 13, Run 22) are adopted and upgraded to 2 in place; STEP_UP enrollments now start pending (behaviour change, documented).
+- External dependencies: the customer's authenticated backend must forward the gateway principal for ownership; none for tests.
+- Next run and verified base: Run 17 (`run-17-verified-scan-history`) from the Run 16 head.
