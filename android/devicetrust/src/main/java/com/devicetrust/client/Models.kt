@@ -43,6 +43,8 @@ class EnrollmentRequest(
     val confirmKeyChain: List<ByteArray>? = null,
     /** Optional client signal report (Phase 3). */
     val signals: JSONObject? = null,
+    val evidenceData: ByteArray? = null,
+    val evidenceSignature: ByteArray? = null,
 )
 
 /**
@@ -82,7 +84,7 @@ enum class SigningKey(val wire: String) {
     /** Device-binding key: proves the request comes from the enrolled phone. */
     DEVICE("device"),
 
-    /** Biometric-bound key: also proves the user approved this exact action. */
+    /** Biometric-bound key: enforces biometric authentication before signing; it does not attest the displayed UI. */
     CONFIRM("confirm"),
 }
 

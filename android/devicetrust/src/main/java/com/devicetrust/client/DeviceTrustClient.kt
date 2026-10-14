@@ -71,6 +71,8 @@ class DeviceTrustClient(
     private val clockMillis: () -> Long = System::currentTimeMillis,
     /** Client RASP signal collector (Phase 3); null sends no report. */
     private val signals: SignalCollector? = null,
+    /** Disable only for a documented legacy server; production policy should require proofs. */
+    private val bindEnrollmentEvidence: Boolean = true,
 ) {
     constructor(context: Context, api: TrustApi, cloudProjectNumber: Long?) : this(
         api = api,
@@ -105,15 +107,24 @@ class DeviceTrustClient(
             } else {
                 null
             }
-            val token = integrity?.token(RequestHash.enrollment(challenge.nonce, key.publicKeySpki))
+            val device = deviceInfo()
+            val report = collectSignals()?.let { JSONObject(it.toString()) }
+            val evidence = if (bindEnrollmentEvidence) EnrollmentProof.data(challenge, key.chain, confirm?.chain, device, report) else null
+            val proofSignature = evidence?.let { bytes ->
+                withContext(Dispatchers.Default) { attester.signer(alias).run { update(bytes); sign() } }
+            }
+            val token = integrity?.token(evidence?.let(RequestHash::enrollmentEvidence)
+                ?: RequestHash.enrollment(challenge.nonce, key.publicKeySpki))
             val result = api.enroll(
                 EnrollmentRequest(
                     challengeId = challenge.challengeId,
                     attestationChain = key.chain,
                     playIntegrityToken = token,
-                    device = deviceInfo(),
+                    device = device,
                     confirmKeyChain = confirm?.chain,
-                    signals = collectSignals(),
+                    signals = report,
+                    evidenceData = evidence,
+                    evidenceSignature = proofSignature,
                 ),
             )
             // STEP_UP enrollments are registered server-side too; the bank decides what to unlock.
