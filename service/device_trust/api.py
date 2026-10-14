@@ -17,6 +17,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from .actions import MAX_SIGNED_DATA_BYTES
+from .enrollment_proof import MAX_PROOF_BYTES
 from .challenges import Challenge, ChallengeCapacityExceeded
 from .play_integrity import b64url
 from .service import ActionRequest, DeviceTrustService, EnrollmentRequest
@@ -52,6 +53,8 @@ class EnrollmentBody(_Model):
     confirm_key_chain: list[str] | None = Field(default=None, alias="confirmKeyChain", min_length=1, max_length=10)
     # Client signal report (signals.py); validated by the service.
     signals: dict | None = None
+    evidence_data: str | None = Field(default=None, alias="evidenceData", max_length=MAX_PROOF_BYTES * 2)
+    evidence_signature: str | None = Field(default=None, alias="evidenceSignature", max_length=1024)
 
 
 class RiskFactorOut(_Model):
@@ -181,6 +184,8 @@ def create_app(
             play_integrity_token=body.play_integrity_token,
             confirm_key_chain=_decode_chain(body.confirm_key_chain) if body.confirm_key_chain else None,
             client_signals=body.signals,
+            evidence_data=_b64(body.evidence_data, "evidenceData") if body.evidence_data is not None else None,
+            evidence_signature=_b64(body.evidence_signature, "evidenceSignature") if body.evidence_signature is not None else None,
             client_ip=client_ip(request),
         )
         result = service.enroll(req)

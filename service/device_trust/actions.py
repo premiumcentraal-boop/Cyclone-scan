@@ -4,7 +4,7 @@ The app signs the *exact bytes* of a small JSON document with its enrolled
 hardware key. The server parses those same bytes (so there is no
 canonicalization step to get wrong), checks them against the server-issued
 challenge, and hands the parsed action back to the backend, which executes
-only what was signed ("what you see is what you sign").
+only what was signed ("execute only the authenticated payload").
 
     {"v": 1, "deviceId": "...", "challengeId": "...", "nonce": "<b64url>",
      "ts": <epoch ms>, "action": {"type": "payment", "params": {...}},
@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_der_public_key
 
 from .play_integrity import b64url
+from .strict_json import strict_loads
 
 ACTION_HASH_DOMAIN = b"device-trust/action/v1"
 MAX_SIGNED_DATA_BYTES = 8 * 1024
@@ -74,15 +75,15 @@ def parse_signed_data(signed_data: bytes) -> SignedAction:
     if len(signed_data) > MAX_SIGNED_DATA_BYTES:
         raise SignedDataError("signed data too large")
     try:
-        doc = json.loads(signed_data.decode("utf-8"), object_pairs_hook=_no_duplicates)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        doc = strict_loads(signed_data, MAX_SIGNED_DATA_BYTES)
+    except ValueError as exc:
         raise SignedDataError("signed data is not UTF-8 JSON") from exc
     if not isinstance(doc, dict) or not _FIELDS <= set(doc) <= _FIELDS | _OPTIONAL_FIELDS:
         raise SignedDataError("signed data must have exactly the documented fields")
     if type(doc["v"]) is not int or doc["v"] != 1:
         raise SignedDataError("unsupported signed data version")
     for key in ("deviceId", "challengeId", "nonce"):
-        if not isinstance(doc[key], str) or not doc[key]:
+        if not isinstance(doc[key], str) or not 1 <= len(doc[key]) <= 128:
             raise SignedDataError(f"{key} must be a non-empty string")
     if type(doc["ts"]) is not int:
         raise SignedDataError("ts must be an integer (epoch milliseconds)")
@@ -106,6 +107,8 @@ def parse_signed_data(signed_data: bytes) -> SignedAction:
 
 def verify_signature(public_key_spki: bytes, signed_data: bytes, signature: bytes) -> bool:
     """ECDSA P-256 / SHA-256 over the exact signed bytes (DER signature, as Android produces)."""
+    if not isinstance(signature, bytes) or not 1 <= len(signature) <= 512:
+        return False
     try:
         key = load_der_public_key(public_key_spki)
     except ValueError:
