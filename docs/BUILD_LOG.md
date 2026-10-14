@@ -8,7 +8,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 |---|---|---|---|---|---|
 | 13 baseline | CI_PASSED | d4667c169a3f1fc2475be940390ec69429c92b06 | PR #6; CI 38482579680 | UNVERIFIED | Scanner 0.6.0; 282 Python tests; 58 vectors |
 | 14 report coverage | CI_PASSED | d4667c1 → 63fd3bd | PR #8 (ready for review); CI 38646802172 | UNVERIFIED | Scanner 0.7.0; 303 Python tests; 59 vectors |
-| 15 verifier compatibility | IMPLEMENTED | 63fd3bd → see entry | see entry | UNVERIFIED | Chain forms, legacy validity, level match |
+| 15 verifier compatibility | CI_PASSED | 63fd3bd → 3d68781 | PR #14; CI 38648998069 | UNVERIFIED | 335 Python tests; 60 risk + 14 attestation vectors |
 | 16 device lifecycle | PLANNED | Run 15 successor | Not created | Not executed | Pending/approval/ownership |
 | 17 server scan/history | PLANNED | Run 16 successor | Not created | Not executed | External Google setup may be needed |
 | 18 beta packaging | PLANNED | Run 17 successor | Not created | Not executed | Stable signing setup dependency |
@@ -35,19 +35,23 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 - Owner decision 15 October 2026: "release" = mark PR #8 ready for review (not merged, no public release). Done.
 
 ### Run 15 — Verifier compatibility and reference fixtures
-- State: IMPLEMENTED (CI result recorded below once available)
-- Started/completed: 15 October 2026 / —
+- State: CI_PASSED (not DEVICE_VERIFIED; not merged)
+- Started/completed: 15 October 2026 / 15 October 2026
 - Exact base SHA: 63fd3bdaf47286359db4c005f4cce0372292e594 (`run-14-report-coverage`, PR #8 open, ready for review)
-- Head SHA: —
-- Branch / PR: `run-15-verifier-compatibility` → base `run-14-report-coverage`; PR —
+- Head SHA: 3d68781ea0a434d334bb37677612e5c2c959e2b6 (code; later commits update this log only)
+- Branch / PR: `run-15-verifier-compatibility` → base `run-14-report-coverage`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/14
 - Changes delivered: see [RUN_15_VERIFIER_COMPATIBILITY.md](RUN_15_VERIFIER_COMPATIBILITY.md)
 - Automated checks actually run:
   - Local Python 3.13: `python -m pytest service/tests` → 335 passed (303 + 32 new); risk vectors 60; attestation vectors 14.
   - Reproduced first: public Sony factory chain as of 2026-10-14 → `CERT_EXPIRED` before the change, passes after with `LEGACY_FACTORY_VALIDITY_EXEMPT`.
   - Local Android/Gradle: NOT RUN (Google Maven unreachable from the workspace); verified by PR CI only.
-- CI URL and outcome: —
+- CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38648998069 — SUCCESS (native host tests + mutations; Python; SDK and scanner JVM tests incl. AttestationVectorsTest; lint; release builds; cross-language signal step; ABI check). APK artifact 11933204744 (debug-key test build).
 - Physical device / OS / app version: none (UNVERIFIED)
-- Observed results: —
+- Observed results: CI only.
 - External dependencies: none for this run; real-device chains (Run 19) would confirm OEM chain shapes.
 - Remaining issues / limitations: see run notes "Limits".
 - Next run and verified base: Run 16 (`run-16-device-lifecycle`) from the Run 15 head, after owner review.
+
+## Repository note (15 October 2026)
+
+A separate stack of draft PRs from the owner's account branches from Run 13 in parallel with this delegation: #7 Run 20 (`run-20-protocol-assurance`) → #9 Run 21 → #10 Run 22 → #11 Run 23 → #12 Run 24 → #13 Run 25 (`run-25-beta-evidence-gate`), opened 14 October 22:06–22:18 UTC. This delegation has not read, changed or rebased those branches. Both stacks modify code from the same Run 13 base, so the owner needs to choose an integration order before merging; topics may overlap with Runs 16–19 (e.g. protocol assurance, evidence history, lab evidence).
