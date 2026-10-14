@@ -136,7 +136,8 @@ object LocalRisk {
     }
 
     private fun provenanceFactors(e: Evidence, reported: Map<String, String>?): List<String> {
-        if (e.chainType != "FACTORY") return emptyList()
+        // UNRECOGNIZED chains (Run 15) were labelled FACTORY before and keep the same "not RKP" factors.
+        if (e.chainType != "FACTORY" && e.chainType != "UNRECOGNIZED") return emptyList()
         val out = mutableListOf<String>()
         if (modelKey(e, reported) in RKP_REQUIRED_MODELS) out += "attestation_not_rkp_on_rkp_model"
         if (e.osVersion != null && e.osVersion / 10000 >= MODERN_OS_MAJOR) out += "attestation_factory_keybox_modern_os"

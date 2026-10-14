@@ -71,6 +71,8 @@ def cases():
     yield "factory_samsung_android13", {**CLEAN, "os_release": "13"}, SAMSUNG_13
     yield "factory_samsung_android14", {**CLEAN, "os_release": "14"}, {**SAMSUNG_13, "os_version": 140000}
     yield "leaked_keybox_on_pixel", CLEAN, {**SB_FRESH, "chain_type": "FACTORY"}
+    # Run 15: an unrecognized chain form keeps the same "not RKP" factors as before.
+    yield "unrecognized_chain_on_pixel", CLEAN, {**SB_FRESH, "chain_type": "UNRECOGNIZED"}
     yield "leaked_keybox_pixel_unattested_ids", CLEAN, {**SB_FRESH, "chain_type": "FACTORY", "attested_ids": {}}, \
         {"brand": "google", "model": "Pixel 8"}
     yield "unattested_ids_other_brand", {**CLEAN, "os_release": "13"}, {**SAMSUNG_13, "attested_ids": {}}, \

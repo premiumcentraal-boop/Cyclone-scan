@@ -26,7 +26,7 @@ class AttestationReport(
     val chainLength: Int,
     val rootSubject: String?,
     val revocationChecked: Boolean,
-    /** "RKP", "FACTORY" or null when the chain could not be verified. */
+    /** "RKP", "FACTORY", "UNRECOGNIZED" or null when the chain could not be verified. */
     val chainType: String? = null,
 ) {
     val hardFailures: List<Check> get() = checks.filter { it.status == Check.Status.FAIL }
@@ -68,7 +68,16 @@ class ChainVerifier(
         checks += when (extPositions) {
             listOf(0) -> Check("ext_leaf_only", "Attestation data only in leaf", Check.Status.PASS)
             emptyList<Int>() -> Check("ext_leaf_only", "Attestation data present", Check.Status.FAIL, "no KeyDescription")
-            else -> Check("ext_leaf_only", "Attestation data only in leaf", Check.Status.FAIL, "forged-leaf pattern")
+            else -> Check("ext_leaf_only", "Attestation data only in leaf", Check.Status.FAIL,
+                "forged-leaf pattern or unsupported ATTEST_KEY chain")
+        }
+        val infoPositions = certs.indices.filter { certs[it].getExtensionValue(PROVISIONING_INFO_OID) != null }
+        if (infoPositions.isNotEmpty()) {
+            checks += Check(
+                "provisioning_info", "Provisioning information directly above leaf",
+                if (infoPositions == listOf(1)) Check.Status.PASS else Check.Status.FAIL,
+                if (infoPositions == listOf(1)) "" else "misplaced provisioning-information extension",
+            )
         }
 
         val sigOk = certs.zipWithNext().all { (child, issuer) ->
@@ -85,9 +94,27 @@ class ChainVerifier(
             if (rootTrusted) shortName(root) else "untrusted root: ${shortName(root)}",
         )
 
+        val chainType = if (sigOk && rootTrusted) classify(certs) else null
+        // Google: expired certificates in factory chains under its RSA root remain trustworthy
+        // unless revoked. Only that exact form is exempt; RKP and not-yet-valid are enforced.
+        val legacyExempt = chainType == CHAIN_FACTORY && rootTrusted &&
+            names(root)["SERIALNUMBER"].equals(LEGACY_RSA_ROOT_SERIAL, ignoreCase = true)
         val now = clock()
-        val expired = certs.drop(1).any { now.before(it.notBefore) || now.after(it.notAfter) }
-        checks += Check("validity", "Intermediate certificates in date", if (expired) Check.Status.FAIL else Check.Status.PASS)
+        var exempted = false
+        var validityProblem: String? = null
+        for (c in certs.drop(1)) {
+            if (now.before(c.notBefore)) { validityProblem = "a certificate is not yet valid"; break }
+            if (now.after(c.notAfter)) {
+                if (legacyExempt) { exempted = true; continue }
+                validityProblem = "a certificate has expired"
+                break
+            }
+        }
+        checks += Check(
+            "validity", "Intermediate certificates in date",
+            if (validityProblem != null) Check.Status.FAIL else Check.Status.PASS,
+            validityProblem ?: if (exempted) "expired factory certificate accepted under Google's legacy-chain guidance" else "",
+        )
 
         if (revokedSerials == null) {
             checks += Check("revocation", "Not on Google revocation list", Check.Status.FAIL, "list unavailable: cannot establish revocation safety")
@@ -107,13 +134,22 @@ class ChainVerifier(
             return AttestationReport(checks, null, certs.size, shortName(root), revokedSerials != null)
         }
         contentChecks(kd, expectedChallenge, expectedPackage, reportedIds, maxPatchAgeMonths, now, checks)
-        val chainType = if (sigOk && rootTrusted) classify(certs) else null
+        if (chainType == CHAIN_RKP || chainType == CHAIN_FACTORY) {
+            val claim = chainSecurityClaim(certs, chainType)
+            val ok = securityLevelMatchesChain(kd.keyMintSecurityLevel, claim)
+            checks += Check(
+                "security_chain", "Security level matches Google-signed chain",
+                if (ok) Check.Status.PASS else Check.Status.FAIL,
+                if (ok) "" else "key claims ${kd.keyMintSecurityLevel.name}, chain claims ${claim?.name ?: "nothing"}",
+            )
+        }
         checks += Check(
             "provenance", "Key provisioned by Google (RKP)",
             if (chainType == CHAIN_RKP) Check.Status.PASS else Check.Status.INFO,
             when (chainType) {
                 CHAIN_RKP -> "short-lived per-device key from Google's Remote Key Provisioning"
                 CHAIN_FACTORY -> "factory keybox (normal for older phones; the kind that leaks)"
+                CHAIN_UNRECOGNIZED -> "unrecognized chain form: not RKP, and not assumed to be a factory keybox"
                 else -> "unknown"
             },
         )
@@ -209,11 +245,52 @@ class ChainVerifier(
         const val GOOGLE_STATUS_URL = "https://android.googleapis.com/attestation/status"
         const val CHAIN_RKP = "RKP"
         const val CHAIN_FACTORY = "FACTORY"
+        const val CHAIN_UNRECOGNIZED = "UNRECOGNIZED"
+        const val PROVISIONING_INFO_OID = "1.3.6.1.4.1.11129.2.1.30"
+        /** Subject serialNumber of Google's RSA attestation root (the legacy factory root). */
+        const val LEGACY_RSA_ROOT_SERIAL = "f92009e853b6b045"
+        private val OID_NAMES = mapOf("2.5.4.5" to "SERIALNUMBER", "2.5.4.12" to "T")
+
+        /** Subject attributes with serialNumber/title decoded as text rather than #hex. */
+        fun names(c: X509Certificate): Map<String, String> =
+            rfc2253Attributes(c.subjectX500Principal.getName(X500Principal.RFC2253, OID_NAMES))
+                .mapValues { (_, v) -> decodeHexString(v) }
+
+        /** RFC 2253 "#<hex DER>" values (short-form string types) back to text; other values unchanged. */
+        private fun decodeHexString(v: String): String {
+            if (!v.startsWith("#") || v.length < 5 || v.length % 2 == 0) return v
+            val bytes = runCatching { v.substring(1).chunked(2).map { it.toInt(16).toByte() }.toByteArray() }
+                .getOrNull() ?: return v
+            val len = bytes[1].toInt() and 0xff
+            return if (len < 0x80 && bytes.size == 2 + len) String(bytes, 2, len, Charsets.UTF_8) else v
+        }
+
+        /** Port of service chain_security_claim (android/keyattestation MATCHES_CERTIFICATE input). */
+        fun chainSecurityClaim(certs: List<X509Certificate>, chainType: String?): SecurityLevel? = when (chainType) {
+            CHAIN_RKP -> when (names(certs[1])["O"]) {
+                "TEE" -> SecurityLevel.TRUSTED_ENVIRONMENT
+                "StrongBox" -> SecurityLevel.STRONG_BOX
+                else -> SecurityLevel.SOFTWARE
+            }
+            CHAIN_FACTORY -> {
+                val text = (names(certs[1]).values + names(certs[2]).values).joinToString(" ").lowercase()
+                if ("strongbox" in text) SecurityLevel.STRONG_BOX else null
+            }
+            else -> null
+        }
+
+        fun securityLevelMatchesChain(keyMint: SecurityLevel, claim: SecurityLevel?): Boolean = when (keyMint) {
+            SecurityLevel.STRONG_BOX -> claim == SecurityLevel.STRONG_BOX
+            SecurityLevel.TRUSTED_ENVIRONMENT -> claim == null || claim == SecurityLevel.TRUSTED_ENVIRONMENT
+            SecurityLevel.SOFTWARE -> claim == null || claim == SecurityLevel.SOFTWARE
+        }
 
         /**
          * Port of service classify_chain: RKP chains are exactly leaf <- per-device key
-         * <- "Droid CA3" <- "Droid CA2" <- Google root. Only valid on a chain whose
-         * signatures and root were already verified.
+         * <- "Droid CA3" <- "Droid CA2" <- Google root; FACTORY chains are exactly
+         * leaf <- attestation key <- intermediate with a serialNumber <- root, without
+         * provisioning information; anything else is UNRECOGNIZED. Only valid on a
+         * chain whose signatures and root were already verified.
          */
         fun classify(certs: List<X509Certificate>): String {
             if (certs.size == 5) {
@@ -228,7 +305,15 @@ class ChainVerifier(
                     return CHAIN_RKP
                 }
             }
-            return CHAIN_FACTORY
+            if (certs.size == 4 &&
+                names(certs[2]).containsKey("SERIALNUMBER") &&
+                certs[1].issuerX500Principal == certs[2].subjectX500Principal &&
+                certs[2].issuerX500Principal == certs[3].subjectX500Principal &&
+                certs.none { it.getExtensionValue(PROVISIONING_INFO_OID) != null }
+            ) {
+                return CHAIN_FACTORY
+            }
+            return CHAIN_UNRECOGNIZED
         }
 
         private fun cnOrg(c: X509Certificate): Pair<String?, String?> {
