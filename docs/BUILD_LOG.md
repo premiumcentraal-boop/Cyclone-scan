@@ -78,3 +78,7 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
 - Migration implications: user_version 0 databases (Phase 1, Run 13, Run 22) are adopted and upgraded to 2 in place; STEP_UP enrollments now start pending (behaviour change, documented).
 - External dependencies: the customer's authenticated backend must forward the gateway principal for ownership; none for tests.
 - Next run and verified base: Run 17 (`run-17-verified-scan-history`) from the Run 16 head.
+
+### Integration note — Run 26 merged (15 October 2026)
+- `run-26-evidence-input-hardening` (PR #16, head c306521de76b8be506c77366a4354796b26e275e, CI green) merged into `run-16-device-lifecycle` as the agreed single follow-up. Scope: offline assurance tooling input hardening (`tools/assurance/*`, `evidence_json.py`), `test_assurance_adversarial.py`, `docs/assurance/RUN_26_EVIDENCE_INPUTS.md`. No conflicts.
+- Local: 422 Python tests passed after the merge (408 + 14 from Run 26).
