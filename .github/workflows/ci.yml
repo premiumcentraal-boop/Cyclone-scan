@@ -81,10 +81,23 @@ jobs:
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Test, lint and assemble
-        run: >-
-          ./gradlew --no-daemon
-          :devicetrust:testDebugUnitTest :devicetrust:lintRelease :devicetrust:assembleRelease
-          :scanner:testReleaseUnitTest :scanner:assembleRelease
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --continue \
+            :devicetrust:testDebugUnitTest :devicetrust:lintRelease :devicetrust:assembleRelease \
+            :scanner:testReleaseUnitTest :scanner:assembleRelease 2>&1 | tee /tmp/gradle.log
+      - name: Annotate Gradle and test failures
+        if: failure()
+        working-directory: .
+        run: python3 tools/ci_failure_annotations.py /tmp/gradle.log android
+      - name: Kotlin signal reports pass the server validator
+        working-directory: .
+        run: |
+          for f in android/devicetrust/build/signals-sample.json android/devicetrust/build/signals-sample-unavailable.json; do
+            PYTHONPATH=service python3 -c 'import json, sys
+          from device_trust.signals import coverage_summary, parse_client_signals
+          print(sys.argv[1], coverage_summary(parse_client_signals(json.load(open(sys.argv[1])))))' "$f"
+          done
       - name: Verify native ABI packaging and owned code bounds
         working-directory: .
         run: python3 tools/check_native_apk.py

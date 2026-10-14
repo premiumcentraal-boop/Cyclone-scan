@@ -18,7 +18,9 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent / "service"))
 
 from device_trust.risk import RiskInput, RiskPolicy, assess  # noqa: E402
-from device_trust.signals import BOOL_SIGNALS, NATIVE_BOOL_SIGNALS, parse_client_signals  # noqa: E402
+from device_trust.signals import (  # noqa: E402
+    BOOL_SIGNALS, COUNTED_SIGNALS, LEGACY_BOOL_SIGNALS, NATIVE_BOOL_SIGNALS, parse_client_signals,
+)
 
 NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
 DIGEST = "ab" * 32
@@ -44,6 +46,10 @@ def cases():
     yield "native_kotlin_agree_root_once", {**CLEAN, "root_su": True, "native_root_su": True,
                                            "native_root_su_status": "DETECTED"}, SB_FRESH
     yield "native_unavailable", {**CLEAN, **{key + "_status": "UNAVAILABLE" for key in NATIVE_BOOL_SIGNALS}}, SB_FRESH
+    # Run 14: typed "could not verify" states are reporting only and never change the score.
+    yield "kotlin_checks_unavailable", {**CLEAN, "signal_coverage_version": 1,
+                                        **{k + "_status": "UNAVAILABLE" for k in sorted(LEGACY_BOOL_SIGNALS | COUNTED_SIGNALS)},
+                                        **{k + "_reason": "ACCESS_DENIED" for k in sorted(LEGACY_BOOL_SIGNALS | COUNTED_SIGNALS)}}, SB_FRESH
     yield "native_code_and_mismatch_cap", {**CLEAN, "native_code_modified": True,
                                          "native_code_modified_status": "DETECTED",
                                          "native_kotlin_mismatch": True,

@@ -15,7 +15,8 @@ import javax.security.auth.x500.X500Principal
 
 /** One check shown in the report: passed / failed / not applicable, with detail text. */
 data class Check(val id: String, val label: String, val status: Status, val detail: String = "") {
-    enum class Status { PASS, FAIL, WARN, INFO }
+    /** UNVERIFIED (Run 14): the check could not be completed; neither a pass nor a finding. */
+    enum class Status { PASS, FAIL, WARN, INFO, UNVERIFIED }
 }
 
 /** Everything learned from one attestation chain (privacy-safe: no serial/IMEI). */

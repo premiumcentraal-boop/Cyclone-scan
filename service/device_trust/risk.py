@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Mapping
 
+from .signals import coverage_summary
+
 ALLOW = "ALLOW"
 STEP_UP = "STEP_UP"
 BLOCK = "BLOCK"
@@ -229,6 +231,9 @@ class RiskResult:
     score: int
     band: str
     factors: tuple[tuple[str, int], ...]  # (factor, points), highest first
+    # Run 14: how many client checks completed / were unavailable. Reporting
+    # only; it never changes the score. None when no client signals arrived.
+    coverage: tuple[tuple[str, int], ...] | None = None
 
     def factor_names(self) -> list[str]:
         return [name for name, _ in self.factors]
@@ -388,4 +393,5 @@ def assess(inp: RiskInput, policy: RiskPolicy, signing_digests: frozenset[str],
     factors = [(f, policy.weights.get(f, 0)) for f in observed_factors(inp, policy, signing_digests, now)]
     factors.sort(key=lambda fp: (-fp[1], fp[0]))
     score = min(100, sum(points for _, points in factors))
-    return RiskResult(score, policy.thresholds_for(action_type).band(score), tuple(factors))
+    coverage = None if inp.client_signals is None else tuple(coverage_summary(inp.client_signals).items())
+    return RiskResult(score, policy.thresholds_for(action_type).band(score), tuple(factors), coverage)

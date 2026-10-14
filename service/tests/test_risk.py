@@ -190,8 +190,11 @@ def test_clean_signed_signals_allow(env):
     out = env.verify(env.sign(phone, overrides={"signals": {**E2E, "app_signature_sha256": None}}))
     assert out["decision"] == "ALLOW", out
     # no_strongbox is informational (weight 0) but still listed for the fraud team.
+    coverage = out["risk"].pop("coverage")
     assert out["risk"] == {"score": 10, "factors": [{"factor": "device_new", "points": 10},
                                                     {"factor": "no_strongbox", "points": 0}]}
+    # A pre-Run-14 client reports no check states: nothing is assumed complete.
+    assert coverage["UNREPORTED"] == 22 and coverage["NOT_DETECTED"] == 0
 
 
 def test_frida_detected_blocks_action(env):

@@ -2,8 +2,14 @@ package com.devicetrust.client.signals
 
 /**
  * Thin seam over everything the collectors read from the OS, so the
- * detection logic is plain Kotlin and unit-testable. Implementations must not
- * throw; return false/null/empty when something cannot be read.
+ * detection logic is plain Kotlin and unit-testable.
+ *
+ * Coverage contract (Run 14): a method returns false/null/empty only when the
+ * query completed and that is the answer. When the OS refuses or fails a query
+ * the implementation may throw; [DeviceSignals] records the throw as
+ * UNAVAILABLE (or UNSUPPORTED) instead of a clean "not detected".
+ * [readText] keeps returning null for any unreadable file; [readTextResult]
+ * and [pathState] add the reason.
  */
 interface SignalProbe {
     fun fileExists(path: String): Boolean
@@ -25,6 +31,20 @@ interface SignalProbe {
     fun isVpnActive(): Boolean
     fun isInCall(): Boolean
     fun hasExternalDisplay(): Boolean
+
+    /** Whether a fixed path exists, separating "absent" from "could not look". */
+    fun pathState(path: String): PathState = if (fileExists(path)) PathState.PRESENT else PathState.ABSENT
+
+    /** Like [readText], but says why a read did not complete. */
+    fun readTextResult(path: String): TextRead =
+        readText(path)?.let { TextRead.Ok(it) } ?: TextRead.Failed(CheckReason.READ_ERROR)
+}
+
+enum class PathState { PRESENT, ABSENT, INACCESSIBLE }
+
+sealed interface TextRead {
+    data class Ok(val text: String) : TextRead
+    data class Failed(val reason: CheckReason) : TextRead
 }
 
 data class BuildInfo(

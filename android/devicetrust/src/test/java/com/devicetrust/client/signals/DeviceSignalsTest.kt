@@ -17,9 +17,16 @@ private val PIXEL = BuildInfo(
 /** Clean phone by default; tests flip individual answers. */
 open class FakeProbe : SignalProbe {
     val files = mutableSetOf<String>()
-    val texts = mutableMapOf<String, String>()
+    /** Readable, clean /proc files by default so the clean phone completes every check. */
+    val texts = mutableMapOf(
+        "/proc/self/maps" to "7f00-7f01 r-xp 00000000 fe:00 1 /system/lib64/libc.so",
+        "/proc/self/status" to "Name:\tbank\nTracerPid:\t0\n",
+        "/proc/mounts" to "/dev/block/dm-0 / ext4 ro,seclabel 0 0",
+        "/proc/self/mounts" to "/dev/block/dm-0 / ext4 ro,seclabel 0 0",
+    )
     val packages = mutableSetOf<String>()
-    val settings = mutableMapOf<String, Int>()
+    /** Both settings readable and off by default (null would mean "could not read"). */
+    val settings = mutableMapOf(DeviceSignals.DEVELOPMENT_SETTINGS_ENABLED to 0, DeviceSignals.ADB_ENABLED to 0)
     var a11y = listOf<AccessibilityServiceRef>()
     var buildInfo = PIXEL
     var debugger = false
@@ -75,10 +82,10 @@ class DeviceSignalsTest {
 
     @Test
     fun reportHasExactlyTheServerSchema() {
-        val expected = boolKeys.toSet() + setOf(
-            "v", "env_a11y_third_party", "env_remote_access_apps", "app_installer", "app_signature_sha256",
-            "os_security_patch", "os_release",
-        )
+        val values = setOf("app_installer", "app_signature_sha256", "os_security_patch", "os_release")
+        val counted = setOf("env_a11y_third_party", "env_remote_access_apps")
+        val expected = boolKeys.toSet() + counted + values + setOf("v", "signal_coverage_version") +
+            (boolKeys + counted + values).flatMap { listOf(it + "_status", it + "_reason") }
         val nativeKeys = NativeSignals.CHECKS.flatMap { key ->
             listOf("native_" + key, "native_" + key + "_status", "native_" + key + "_comparison",
                 "kotlin_" + key + "_comparison_status")
@@ -205,6 +212,141 @@ class DeviceSignalsTest {
         assertFalse(report.getBoolean("hook_frida"))
         assertFalse(report.getBoolean("emu_build"))
         assertEquals(0, report.getInt("env_a11y_third_party"))
+        // Run 14: failures are reported as "could not verify", never as clean.
+        assertEquals("UNAVAILABLE", report.getString("hook_frida_status"))
+        assertEquals("ACCESS_DENIED", report.getString("hook_frida_reason"))
+        assertEquals("UNAVAILABLE", report.getString("emu_build_status"))
+        assertEquals("UNAVAILABLE", report.getString("root_apps_status"))
+        assertEquals("UNAVAILABLE", report.getString("hook_frida_port_status"))
+        assertEquals("UNAVAILABLE", report.getString("env_a11y_third_party_status"))
+        assertEquals("UNAVAILABLE", report.getString("env_remote_access_a11y_status"))
+        assertEquals("UNAVAILABLE", report.getString("os_release_status"))
+        assertTrue(report.isNull("os_release"))
+        assertCoherent(report)
+    }
+
+    @Test
+    fun cleanPhoneCompletesEveryCheck() {
+        val report = collect()
+        assertEquals(DeviceSignals.COVERAGE_VERSION, report.getInt("signal_coverage_version"))
+        (boolKeys + listOf("env_a11y_third_party", "env_remote_access_apps")).forEach {
+            assertEquals(it, "NOT_DETECTED", report.getString(it + "_status"))
+            assertEquals(it, "COMPLETED", report.getString(it + "_reason"))
+        }
+        listOf("app_installer", "app_signature_sha256", "os_security_patch", "os_release").forEach {
+            assertEquals(it, "COLLECTED", report.getString(it + "_status"))
+        }
+        assertCoherent(report)
+    }
+
+    @Test
+    fun deniedReadsAreNeverReportedAsClean() {
+        val report = DeviceSignals(object : FakeProbe() {
+            override fun readTextResult(path: String) = TextRead.Failed(CheckReason.ACCESS_DENIED)
+            override fun pathState(path: String) = PathState.INACCESSIBLE
+        }).collect()
+        listOf("root_su", "root_magisk", "root_system_rw", "hook_frida", "hook_zygisk", "debug_traced", "emu_files").forEach {
+            assertFalse(it, report.getBoolean(it))
+            assertEquals(it, "UNAVAILABLE", report.getString(it + "_status"))
+            assertEquals(it, "ACCESS_DENIED", report.getString(it + "_reason"))
+        }
+        // Xposed also has class and stack evidence that completed, so the maps gap is partial coverage.
+        assertEquals("UNAVAILABLE", report.getString("hook_xposed_status"))
+        assertEquals("PARTIAL_COVERAGE", report.getString("hook_xposed_reason"))
+        assertCoherent(report)
+    }
+
+    @Test
+    fun partialPathCoverageIsNotClean() {
+        val partial = object : FakeProbe() {
+            override fun pathState(path: String) =
+                if (path.startsWith("/data/")) PathState.INACCESSIBLE else super.pathState(path)
+        }
+        val report = DeviceSignals(partial).collect()
+        assertEquals("UNAVAILABLE", report.getString("root_su_status"))
+        assertEquals("PARTIAL_COVERAGE", report.getString("root_su_reason"))
+        assertEquals("NOT_DETECTED", report.getString("emu_files_status"))
+
+        partial.files += "/system/xbin/su"
+        val hit = DeviceSignals(partial).collect()
+        assertTrue(hit.getBoolean("root_su"))
+        assertEquals("DETECTED", hit.getString("root_su_status"))
+        assertEquals("COMPLETED", hit.getString("root_su_reason"))
+    }
+
+    @Test
+    fun detectionSurvivesAnUnreadableSource() {
+        val report = DeviceSignals(object : FakeProbe() {
+            override fun readTextResult(path: String) = TextRead.Failed(CheckReason.READ_ERROR)
+        }.apply { classes += "de.robv.android.xposed.XposedBridge" }).collect()
+        assertTrue(report.getBoolean("hook_xposed"))
+        assertEquals("DETECTED", report.getString("hook_xposed_status"))
+    }
+
+    @Test
+    fun apiFailuresAreClassified() {
+        val report = DeviceSignals(object : FakeProbe() {
+            override fun isVpnActive(): Boolean = throw SecurityException("no permission")
+            override fun isInCall(): Boolean = throw IllegalStateException("service died")
+            override fun hasExternalDisplay(): Boolean = throw UnsupportedOperationException()
+            override fun globalSettingInt(name: String): Int? = null
+        }).collect()
+        assertEquals("ACCESS_DENIED", report.getString("env_vpn_reason"))
+        assertEquals("UNAVAILABLE", report.getString("env_in_call_status"))
+        assertEquals("API_ERROR", report.getString("env_in_call_reason"))
+        assertEquals("UNSUPPORTED", report.getString("env_external_display_status"))
+        assertEquals("API_UNSUPPORTED", report.getString("env_external_display_reason"))
+        assertEquals("UNAVAILABLE", report.getString("env_adb_status"))
+        assertEquals("READ_ERROR", report.getString("env_adb_reason"))
+        assertCoherent(report)
+    }
+
+    @Test
+    fun malformedTracerLineIsNotReportedAsUntraced() {
+        val report = collect { texts["/proc/self/status"] = "Name:\tbank\n" }
+        assertFalse(report.getBoolean("debug_traced"))
+        assertEquals("UNAVAILABLE", report.getString("debug_traced_status"))
+        assertEquals("MALFORMED", report.getString("debug_traced_reason"))
+    }
+
+    @Test
+    fun valueStatesSeparateNoInstallerFromFailedQuery() {
+        val sideloaded = collect { installer = null }
+        assertTrue(sideloaded.isNull("app_installer"))
+        assertEquals("COLLECTED", sideloaded.getString("app_installer_status"))
+
+        val failed = DeviceSignals(object : FakeProbe() {
+            override fun installerPackage(): String? = throw IllegalStateException()
+        }).collect()
+        assertTrue(failed.isNull("app_installer"))
+        assertEquals("UNAVAILABLE", failed.getString("app_installer_status"))
+
+        val noSignature = collect { signature = null }
+        assertEquals("UNAVAILABLE", noSignature.getString("app_signature_sha256_status"))
+        assertEquals("READ_ERROR", noSignature.getString("app_signature_sha256_reason"))
+    }
+
+    @Test
+    fun anyOfCombinationRules() {
+        val d = CheckResult.DETECTED
+        val n = CheckResult.NOT_DETECTED
+        val denied = CheckResult.unavailable(CheckReason.ACCESS_DENIED)
+        val unsupported = CheckResult(CheckState.UNSUPPORTED, CheckReason.API_UNSUPPORTED)
+        assertEquals(d, CheckResult.anyOf(listOf(denied, d)))
+        assertEquals(n, CheckResult.anyOf(listOf(n, n)))
+        assertEquals(denied, CheckResult.anyOf(listOf(denied, denied)))
+        assertEquals(CheckReason.PARTIAL_COVERAGE, CheckResult.anyOf(listOf(n, denied)).reason)
+        assertEquals(unsupported, CheckResult.anyOf(listOf(unsupported)))
+        assertEquals(CheckState.UNAVAILABLE, CheckResult.anyOf(emptyList()).state)
+    }
+
+    /** Wire invariant the server enforces: true <=> DETECTED, and only completed checks say COMPLETED. */
+    private fun assertCoherent(report: JSONObject) {
+        boolKeys.forEach { key ->
+            val status = report.getString(key + "_status")
+            assertEquals(key, status == "DETECTED", report.getBoolean(key))
+            assertEquals(key, status == "DETECTED" || status == "NOT_DETECTED", report.getString(key + "_reason") == "COMPLETED")
+        }
     }
 
     /** Writes a fully-detected report for the cross-language check against the Python parser. */
@@ -219,5 +361,12 @@ class DeviceSignalsTest {
             a11y = listOf(AccessibilityServiceRef("com.carriez.flutter_hbb", false))
         }
         File("build/signals-sample.json").apply { parentFile?.mkdirs() }.writeText(report.toString())
+        val unavailable = DeviceSignals(object : FakeProbe() {
+            override fun readTextResult(path: String) = TextRead.Failed(CheckReason.ACCESS_DENIED)
+            override fun pathState(path: String) = PathState.INACCESSIBLE
+            override fun installerPackage(): String? = throw IllegalStateException()
+            override fun enabledAccessibilityServices(): List<AccessibilityServiceRef> = throw SecurityException()
+        }).collect()
+        File("build/signals-sample-unavailable.json").writeText(unavailable.toString())
     }
 }

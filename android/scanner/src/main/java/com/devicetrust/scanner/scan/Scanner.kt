@@ -29,11 +29,26 @@ class ScanResult(
     val signingDigest: String?,
     val durationMs: Long,
     val scannedAt: Date,
+    /** Hardware-attested evidence used by the local risk engine; null without attestation. */
+    val evidence: LocalRisk.Evidence? = null,
+    /** True only when the attestation listed this app's signer, so the signature row compared something. */
+    val attestedSignerAvailable: Boolean = false,
 ) {
     val hardFailures: List<Check> get() = attestation.hardFailures
+    val findings: List<Finding> get() = ReportCoverage.findings(signals)
+    val layers: List<Layer> get() = ReportCoverage.layers(attestation, findings)
 
+    /**
+     * Shareable diagnostic report. Schema 2 (Run 14) is additive over the
+     * 0.6.0 export: it keeps every earlier field and adds typed findings,
+     * coverage counts and verification layers. It contains no serial, IMEI,
+     * account data, file paths, memory maps or secrets; free-text details are
+     * bounded.
+     */
     fun toJson(): JSONObject = JSONObject().apply {
-        put("scanner", "device-trust-scanner/0.6.0")
+        put("reportSchema", ReportCoverage.SCHEMA)
+        put("reportSchemaVersion", ReportCoverage.SCHEMA_VERSION)
+        put("scanner", "device-trust-scanner/$SCANNER_VERSION")
         put("evaluationMode", "LOCAL_DIAGNOSTIC")
         put("playIntegrityEvaluated", false)
         put("fleetEvaluated", false)
@@ -63,11 +78,32 @@ class ScanResult(
                 put("attestedIds", JSONObject(kd.hardwareEnforced.attestedIds as Map<*, *>))
             }
             put("checks", JSONArray(attestation.checks.map {
-                JSONObject().put("id", it.id).put("status", it.status.name).put("detail", it.detail)
+                JSONObject().put("id", it.id).put("status", it.status.name).put("detail", it.detail.take(MAX_DETAIL))
             }))
         })
         put("signals", signals)
+        val all = findings
+        put("coverage", JSONObject()
+            .put("local", ReportCoverage.counts(all, EvidenceSource.LOCAL_CHECK).toJson())
+            .put("native", ReportCoverage.counts(all, EvidenceSource.LOCAL_NATIVE).toJson()))
+        put("findings", JSONArray(all.map { f ->
+            JSONObject().put("id", f.id).put("source", f.source.name).put("state", f.state.name)
+                .put("reason", f.reason ?: JSONObject.NULL)
+        }))
+        put("verification", JSONArray(ReportCoverage.layers(attestation, all).map { l ->
+            JSONObject().put("id", l.id).put("source", l.source.name).put("state", l.state.name).put("detail", l.detail)
+        }))
+        put("exportNotice", EXPORT_NOTICE)
         put("durationMs", durationMs)
+    }
+
+    companion object {
+        const val SCANNER_VERSION = "0.7.0"
+        const val MAX_DETAIL = 120
+        const val EXPORT_NOTICE = "Local diagnostic only. UNAVAILABLE or UNSUPPORTED checks were not verified and are " +
+            "not evidence of safety. Play Integrity, server policy, fleet history and official signer verification " +
+            "were not evaluated. Contains device model, attested OS/patch facts and check states; no serial, IMEI, " +
+            "account data, file paths or secrets."
     }
 }
 
@@ -114,26 +150,31 @@ class Scanner(private val context: Context) {
         }
 
         val signals = DeviceSignals(AndroidSignalProbe(context)).collect()
+        // JSON null must not become the string "null" (org.json's optString on NULL).
+        val ownDigest = if (signals.isNull("app_signature_sha256")) null else signals.optString("app_signature_sha256").ifEmpty { null }
         val kd = report.keyDescription
-        val attestedDigests = (kd?.hardwareEnforced?.appId ?: kd?.softwareEnforced?.appId)
+        val attestedSigners = (kd?.hardwareEnforced?.appId ?: kd?.softwareEnforced?.appId)
             ?.signatureDigests?.map { d -> d.joinToString("") { "%02x".format(it) } }?.toSet().orEmpty()
-            // Without attestation there is nothing to compare against; the hard failure already blocks.
-            .ifEmpty { setOfNotNull(signals.optString("app_signature_sha256").ifEmpty { null }) }
+        // Without attestation there is nothing to compare against; the hard failure already blocks,
+        // and the report marks the signature comparison as not performed (attestedSignerAvailable).
+        val attestedDigests = attestedSigners
+            .ifEmpty { setOfNotNull(ownDigest) }
         val hw = kd?.hardwareEnforced
+        val evidence = kd?.let {
+            LocalRisk.Evidence(
+                osPatchLevel = hw?.osPatchLevel,
+                securityLevel = it.attestationSecurityLevel.name,
+                chainType = report.chainType,
+                attestedBrand = hw?.attestedIds?.get("brand"),
+                attestedModel = hw?.attestedIds?.get("model"),
+                osVersion = hw?.osVersion,
+                vendorPatchLevel = hw?.vendorPatchLevel,
+                bootPatchLevel = hw?.bootPatchLevel,
+            )
+        }
         val risk = LocalRisk.assess(
             signals,
-            kd?.let {
-                LocalRisk.Evidence(
-                    osPatchLevel = hw?.osPatchLevel,
-                    securityLevel = it.attestationSecurityLevel.name,
-                    chainType = report.chainType,
-                    attestedBrand = hw?.attestedIds?.get("brand"),
-                    attestedModel = hw?.attestedIds?.get("model"),
-                    osVersion = hw?.osVersion,
-                    vendorPatchLevel = hw?.vendorPatchLevel,
-                    bootPatchLevel = hw?.bootPatchLevel,
-                )
-            },
+            evidence,
             attestedDigests,
             reportedIds = mapOf("brand" to device.brand, "model" to device.model),
         )
@@ -149,9 +190,11 @@ class Scanner(private val context: Context) {
             signals = signals,
             device = device,
             strongBoxKey = key?.strongBox == true,
-            signingDigest = signals.optString("app_signature_sha256").ifEmpty { null },
+            signingDigest = ownDigest,
             durationMs = System.currentTimeMillis() - started,
             scannedAt = Date(started),
+            evidence = evidence,
+            attestedSignerAvailable = attestedSigners.isNotEmpty(),
         )
     }
 }

@@ -62,12 +62,17 @@ class RiskFactorOut(_Model):
 class RiskOut(_Model):
     score: int
     factors: list[RiskFactorOut]
+    # Run 14: counts of client check states (DETECTED / NOT_DETECTED /
+    # UNAVAILABLE / UNSUPPORTED / UNREPORTED). Explanatory only.
+    coverage: dict[str, int] | None = None
 
 
 def _risk_out(risk) -> RiskOut | None:
     if risk is None:
         return None
-    return RiskOut(score=risk.score, factors=[RiskFactorOut(factor=f, points=p) for f, p in risk.factors])
+    coverage = dict(risk.coverage) if getattr(risk, "coverage", None) is not None else None
+    return RiskOut(score=risk.score, factors=[RiskFactorOut(factor=f, points=p) for f, p in risk.factors],
+                   coverage=coverage)
 
 
 class EnrollmentResponse(_Model):
