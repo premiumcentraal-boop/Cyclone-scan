@@ -9,6 +9,9 @@ import java.util.Base64
  */
 object RequestHash {
     private val ENROLL_DOMAIN = "device-trust/enroll/v1".toByteArray(Charsets.US_ASCII)
+    private val EVIDENCE_DOMAIN = "device-trust/enroll-evidence/v1".toByteArray(Charsets.US_ASCII)
+    fun enrollmentEvidence(data: ByteArray): String = hash(EVIDENCE_DOMAIN, data)
+
     private val ACTION_DOMAIN = "device-trust/action/v1".toByteArray(Charsets.US_ASCII)
 
     /** base64url(SHA-256("device-trust/enroll/v1" || nonce || attested key SPKI DER)), unpadded. */

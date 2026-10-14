@@ -28,6 +28,7 @@ from .actions import (
 )
 from .attestation import AttestationEvidence, AttestationResult, AttestationVerifier
 from .challenges import Challenge, ChallengeStore
+from .enrollment_proof import validate_proof
 from .key_description import AUTH_BIOMETRIC, AUTH_PASSWORD
 from .play_integrity import DecodeError, IntegrityTokenDecoder, b64url, enrollment_request_hash, evaluate_payload
 from .policy import TrustPolicy
@@ -60,6 +61,8 @@ class EnrollmentRequest:
     client_signals: object = None
     # Caller's IP as seen by the API; only a keyed hash of its network block is kept.
     client_ip: str | None = None
+    evidence_data: bytes | None = None
+    evidence_signature: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -197,11 +200,28 @@ class DeviceTrustService:
         reasons = list(att.reasons)
         warnings: list[str] = list(att.notes)
         play_signals = None
+        expected_play_hash = enrollment_request_hash(nonce, att.leaf_public_key_spki or b"")
+        proof_ok = False
+        proof_present = req.evidence_data is not None or req.evidence_signature is not None
+        if proof_present:
+            try:
+                expected_play_hash = validate_proof(
+                    req.evidence_data, req.evidence_signature, att.leaf_public_key_spki,
+                    req.challenge_id, nonce, req.attestation_chain, req.confirm_key_chain,
+                    req.reported_ids, req.client_signals,
+                )
+                proof_ok = True
+            except (ValueError, TypeError):
+                reasons.append(R.ENROLLMENT_PROOF_INVALID)
+        elif self.policy.require_bound_enrollment:
+            reasons.append(R.ENROLLMENT_PROOF_MISSING)
+        else:
+            warnings.append(R.ENROLLMENT_LEGACY_UNBOUND)
 
         if att.leaf_public_key_spki is not None:
             play_signals = self._check_play(
                 req.play_integrity_token,
-                enrollment_request_hash(nonce, att.leaf_public_key_spki),
+                expected_play_hash,
                 self.policy.require_play_integrity,
                 reasons,
                 warnings,
@@ -229,7 +249,7 @@ class DeviceTrustService:
         if att.evidence is not None:
             evidence = asdict(att.evidence)
             keybox = None
-            if att.ok and att.evidence.attestation_key_sha256:
+            if att.ok and (proof_ok or not self.policy.require_bound_enrollment and not proof_present) and att.evidence.attestation_key_sha256:
                 # Only fresh, verified ownership contributes to trusted key history.
                 # Invalid nonce/identity submissions cannot poison another device.
                 self._registry.record_attestation_key(
