@@ -25,7 +25,8 @@ open class FakeProbe : SignalProbe {
         "/proc/self/mounts" to "/dev/block/dm-0 / ext4 ro,seclabel 0 0",
     )
     val packages = mutableSetOf<String>()
-    val settings = mutableMapOf<String, Int>()
+    /** Both settings readable and off by default (null would mean "could not read"). */
+    val settings = mutableMapOf(DeviceSignals.DEVELOPMENT_SETTINGS_ENABLED to 0, DeviceSignals.ADB_ENABLED to 0)
     var a11y = listOf<AccessibilityServiceRef>()
     var buildInfo = PIXEL
     var debugger = false
