@@ -24,7 +24,8 @@ run only inside the app.
 5. **Run 6 (done):** attestation provenance (Google RKP vs factory keybox), fleet-wide leaked-keybox detection, hardware-vs-reported patch/OS spoofing checks.
 6. **Run 12 (done):** fleet intelligence: network-block and cohort bursts (privacy-preserving keyed hashes), many devices per network, Play Integrity device recall, admin fleet view.
 7. **Run 13:** native own-process collector, native/Kotlin comparisons and honest coverage reporting; see [run notes](docs/RUN_13_NATIVE.md).
-8. **Next build runs:** SDK self-protection, continuous protection, scam/malware depth, production backbone, attack lab + benchmark. Real-device verification follows the build runs.
+8. **Run 14:** typed coverage for every Kotlin check (detected / clean / could not verify / unsupported), strict server validation, scanner "Verification coverage" card and versioned export; see [run notes](docs/RUN_14_REPORT_COVERAGE.md).
+9. **Next delegated runs (see [build log](docs/BUILD_LOG.md)):** 15 verifier compatibility, 16 device lifecycle, 17 server-verified scan and history, 18 beta packaging, 19 device validation and beta candidate. Normal-phone smoke tests should start as soon as a test device is available.
 
 ## Quick start
 

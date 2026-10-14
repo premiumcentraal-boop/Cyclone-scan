@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,12 +31,14 @@ val Green = Color(0xFF1E8E3E)
 val Amber = Color(0xFFE37400)
 val Red = Color(0xFFD93025)
 val Blue = Color(0xFF1A73E8)
+val Grey = Color(0xFF5F6368)
 
 fun statusColor(status: Check.Status) = when (status) {
     Check.Status.PASS -> Green
     Check.Status.WARN -> Amber
     Check.Status.FAIL -> Red
     Check.Status.INFO -> Blue
+    Check.Status.UNVERIFIED -> Grey
 }
 
 @Composable
@@ -45,8 +48,9 @@ fun StatusIcon(status: Check.Status) {
         Check.Status.WARN -> Icons.Filled.Warning
         Check.Status.FAIL -> Icons.Filled.Error
         Check.Status.INFO -> Icons.Filled.Info
+        Check.Status.UNVERIFIED -> Icons.Filled.QuestionMark
     }
-    Icon(icon, contentDescription = status.name, tint = statusColor(status), modifier = Modifier.size(20.dp))
+    Icon(icon, contentDescription = if (status == Check.Status.UNVERIFIED) "could not verify" else status.name, tint = statusColor(status), modifier = Modifier.size(20.dp))
 }
 
 @Composable

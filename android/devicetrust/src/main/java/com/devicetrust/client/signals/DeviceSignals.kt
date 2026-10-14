@@ -10,98 +10,154 @@ fun interface SignalCollector {
 
 /**
  * Client-side RASP checks. Every check is best-effort and isolated: a failing
- * check reports "not detected" rather than crashing, and the server treats
- * the whole report as evidence that raises risk, never as proof of safety.
+ * check never crashes collection. Since Run 14 each check also reports a
+ * typed `<key>_status` (DETECTED / NOT_DETECTED / UNAVAILABLE / UNSUPPORTED)
+ * and a bounded `<key>_reason`, so a denied read is reported as "could not
+ * verify", never as a clean result. The boolean stays `false` for anything
+ * other than DETECTED, which keeps the v1 wire format and scoring unchanged.
+ * The server treats the whole report as evidence that raises risk, never as
+ * proof of safety.
  *
- * Only booleans, counts and short identifiers are reported: no file
- * contents, no installed-app inventory beyond the fixed lists below.
+ * Only booleans, counts, states and short identifiers are reported: no file
+ * contents, paths, memory maps or installed-app inventory beyond the fixed
+ * lists below.
  */
 class DeviceSignals(private val probe: SignalProbe, private val nativeProbe: NativeProbe = JniNativeProbe) : SignalCollector {
 
     override fun collect(): JSONObject {
-        val maps = safe { probe.readText("/proc/self/maps") }.orEmpty()
-        val mapsLower = maps.lowercase()
-        val build = safe { probe.build() }
-        val a11y = safe { probe.enabledAccessibilityServices() }.orEmpty()
-        val remoteApps = REMOTE_ACCESS_APPS.filter { (_, pkgs) -> pkgs.any { check { probe.isPackageInstalled(it) } } }
-            .keys.sorted()
+        val maps = read("/proc/self/maps")
+        val mapsLower = (maps as? TextRead.Ok)?.text?.lowercase()
+        val build: Result<BuildInfo> = runCatching { probe.build() }
+        val a11y: Result<List<AccessibilityServiceRef>> = runCatching { probe.enabledAccessibilityServices() }
+        val remoteParts = REMOTE_ACCESS_APPS.mapValues { (_, pkgs) -> CheckResult.anyOf(pkgs.map { observe { probe.isPackageInstalled(it) } }) }
+        val remoteApps = remoteParts.filterValues { it.detected }.keys.sorted()
 
-        return JSONObject().apply {
-            put("v", 1)
-            // root
-            put("root_su", check { suPresent() })
-            put("root_magisk", check { MAGISK_PATHS.any(probe::fileExists) || mountsMention("magisk") })
-            put("root_apps", check { ROOT_APPS.any(probe::isPackageInstalled) })
-            put("root_test_keys", build?.tags?.contains("test-keys") == true)
-            put("root_system_rw", check { systemMountedRw() })
-            // hooking
-            put("hook_frida", "frida" in mapsLower || "gum-js-loop" in mapsLower || "gadget" in mapsLower)
-            put("hook_frida_port", check { FRIDA_PORTS.any(probe::canConnectLoopback) })
-            put("hook_xposed", check { xposedPresent(mapsLower) })
-            put("hook_zygisk", "zygisk" in mapsLower)
-            // debugging
-            put("debug_attached", check { probe.isDebuggerConnected() })
-            put("debug_traced", check { tracerPid() > 0 })
-            put("debug_app_debuggable", check { probe.isAppDebuggable() })
-            // emulator
-            put("emu_build", build?.let(::looksLikeEmulator) == true)
-            put("emu_files", check { EMULATOR_FILES.any(probe::fileExists) })
-            // app integrity
-            put("app_installer", safe { probe.installerPackage() } ?: JSONObject.NULL)
-            put("app_signature_sha256", safe { probe.signingCertSha256() } ?: JSONObject.NULL)
-            // OS facts as apps see them; the server compares them with the hardware-attested values,
-            // which property-spoofing modules (e.g. PlayIntegrityFix) cannot change.
-            put("os_security_patch", build?.securityPatch?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
-            put("os_release", build?.release?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
-            // environment
-            put("env_dev_options", safe { probe.globalSettingInt(DEVELOPMENT_SETTINGS_ENABLED) } == 1)
-            put("env_adb", safe { probe.globalSettingInt(ADB_ENABLED) } == 1)
-            put("env_vpn", check { probe.isVpnActive() })
-            put("env_in_call", check { probe.isInCall() })
-            put("env_external_display", check { probe.hasExternalDisplay() })
-            put("env_a11y_third_party", a11y.filterNot { it.isSystemApp }.map { it.packageName }.distinct().size)
-            put("env_remote_access_a11y", a11y.any { s -> REMOTE_ACCESS_APPS.values.any { s.packageName in it } })
-            put("env_remote_access_apps", JSONArray(remoteApps))
-        }.also { NativeSignals.enrich(it, probe, nativeProbe) }
+        val report = JSONObject().put("v", 1).put("signal_coverage_version", COVERAGE_VERSION)
+        fun flag(key: String, result: CheckResult) {
+            report.put(key, result.detected)
+            report.put(key + "_status", result.state.name)
+            report.put(key + "_reason", result.reason.name)
+        }
+        fun value(key: String, result: Result<String?>) {
+            val v = result.getOrNull()
+            report.put(key, v ?: JSONObject.NULL)
+            val failure = result.exceptionOrNull()
+            val (state, reason) = when {
+                failure == null -> ValueState.COLLECTED to CheckReason.COMPLETED
+                failure is MissingValue -> ValueState.UNAVAILABLE to CheckReason.READ_ERROR
+                else -> CheckResult.failure(failure).let {
+                    (if (it.state == CheckState.UNSUPPORTED) ValueState.UNSUPPORTED else ValueState.UNAVAILABLE) to it.reason
+                }
+            }
+            report.put(key + "_status", state.name)
+            report.put(key + "_reason", reason.name)
+        }
+        fun mapsCheck(test: (String) -> Boolean): CheckResult = when {
+            mapsLower != null -> CheckResult.of(test(mapsLower))
+            else -> CheckResult.unavailable((maps as TextRead.Failed).reason)
+        }
+        fun buildCheck(test: (BuildInfo) -> Boolean): CheckResult =
+            build.fold({ b -> observe { test(b) } }, { CheckResult.failure(it) })
+        fun setting(name: String): CheckResult = try {
+            probe.globalSettingInt(name)?.let { CheckResult.of(it == 1) } ?: CheckResult.unavailable(CheckReason.READ_ERROR)
+        } catch (t: Throwable) {
+            CheckResult.failure(t)
+        }
+
+        // root
+        flag("root_su", paths(suDirs().map { it.trimEnd('/') + "/su" }))
+        flag("root_magisk", CheckResult.anyOf(listOf(paths(MAGISK_PATHS), textCheck("/proc/self/mounts") { "magisk" in it.lowercase() })))
+        flag("root_apps", CheckResult.anyOf(ROOT_APPS.map { observe { probe.isPackageInstalled(it) } }))
+        flag("root_test_keys", buildCheck { it.tags.contains("test-keys") })
+        flag("root_system_rw", textCheck("/proc/mounts", ::systemMountedRw))
+        // hooking
+        flag("hook_frida", mapsCheck { m -> "frida" in m || "gum-js-loop" in m || "gadget" in m })
+        flag("hook_frida_port", CheckResult.anyOf(FRIDA_PORTS.map { observe { probe.canConnectLoopback(it) } }))
+        flag("hook_xposed", CheckResult.anyOf(
+            listOf(mapsCheck { m -> XPOSED_MAP_TOKENS.any { it in m } }) +
+                XPOSED_CLASSES.map { observe { probe.classExists(it) } } +
+                observe { probe.currentStackTrace().any { frame -> XPOSED_STACK_TOKENS.any { it in frame } } },
+        ))
+        flag("hook_zygisk", mapsCheck { "zygisk" in it })
+        // debugging
+        flag("debug_attached", observe { probe.isDebuggerConnected() })
+        flag("debug_traced", tracer())
+        flag("debug_app_debuggable", observe { probe.isAppDebuggable() })
+        // emulator
+        flag("emu_build", buildCheck(::looksLikeEmulator))
+        flag("emu_files", paths(EMULATOR_FILES))
+        // app integrity
+        value("app_installer", runCatching { probe.installerPackage() })
+        value("app_signature_sha256", runCatching { probe.signingCertSha256() ?: throw MissingValue() })
+        // OS facts as apps see them; the server compares them with the hardware-attested values,
+        // which property-spoofing modules (e.g. PlayIntegrityFix) cannot change. An empty
+        // Build value is reported as null/UNAVAILABLE rather than as a fact.
+        value("os_security_patch", build.mapCatching { it.securityPatch.ifEmpty { throw MissingValue() } })
+        value("os_release", build.mapCatching { it.release.ifEmpty { throw MissingValue() } })
+        // environment
+        flag("env_dev_options", setting(DEVELOPMENT_SETTINGS_ENABLED))
+        flag("env_adb", setting(ADB_ENABLED))
+        flag("env_vpn", observe { probe.isVpnActive() })
+        flag("env_in_call", observe { probe.isInCall() })
+        flag("env_external_display", observe { probe.hasExternalDisplay() })
+        val a11yServices = a11y.getOrNull().orEmpty()
+        val a11yResult = a11y.fold({ CheckResult.NOT_DETECTED }, { CheckResult.failure(it) })
+        val thirdParty = a11yServices.filterNot { it.isSystemApp }.map { it.packageName }.distinct().size
+        report.put("env_a11y_third_party", thirdParty)
+        report.put("env_a11y_third_party_status", (if (thirdParty > 0) CheckResult.DETECTED else a11yResult).state.name)
+        report.put("env_a11y_third_party_reason", (if (thirdParty > 0) CheckResult.DETECTED else a11yResult).reason.name)
+        flag("env_remote_access_a11y",
+            if (a11yServices.any { s -> REMOTE_ACCESS_APPS.values.any { s.packageName in it } }) CheckResult.DETECTED else a11yResult)
+        val remote = CheckResult.anyOf(remoteParts.values.toList())
+        report.put("env_remote_access_apps", JSONArray(remoteApps))
+        report.put("env_remote_access_apps_status", remote.state.name)
+        report.put("env_remote_access_apps_reason", remote.reason.name)
+        return report.also { NativeSignals.enrich(it, probe, nativeProbe) }
     }
 
-    private fun suPresent(): Boolean {
-        val dirs = (probe.pathDirectories() + SU_DIRS).distinct()
-        return dirs.any { probe.fileExists(it.trimEnd('/') + "/su") }
+    /** A query that completed without a usable value (e.g. empty Build field, no signing certificate). */
+    private class MissingValue : RuntimeException()
+
+    private fun read(path: String): TextRead = try {
+        probe.readTextResult(path)
+    } catch (t: Throwable) {
+        TextRead.Failed(CheckResult.failure(t).reason)
     }
 
-    private fun mountsMention(token: String): Boolean =
-        probe.readText("/proc/self/mounts")?.lowercase()?.contains(token) == true
+    private fun textCheck(path: String, test: (String) -> Boolean): CheckResult = when (val r = read(path)) {
+        is TextRead.Ok -> observe { test(r.text) }
+        is TextRead.Failed -> CheckResult.unavailable(r.reason)
+    }
 
-    private fun systemMountedRw(): Boolean =
-        probe.readText("/proc/mounts").orEmpty().lineSequence().any { line ->
+    private fun paths(list: List<String>): CheckResult = CheckResult.anyOf(list.map { path ->
+        try {
+            probe.pathState(path).toResult()
+        } catch (t: Throwable) {
+            CheckResult.failure(t)
+        }
+    })
+
+    private fun suDirs(): List<String> =
+        ((runCatching { probe.pathDirectories() }.getOrNull() ?: emptyList()) + SU_DIRS).distinct()
+
+    private fun systemMountedRw(mounts: String): Boolean =
+        mounts.lineSequence().any { line ->
             val parts = line.split(' ')
             parts.size >= 4 && parts[1] == "/system" && parts[3].split(',').contains("rw")
         }
 
-    private fun xposedPresent(mapsLower: String): Boolean =
-        XPOSED_MAP_TOKENS.any { it in mapsLower } ||
-            XPOSED_CLASSES.any(probe::classExists) ||
-            probe.currentStackTrace().any { frame -> XPOSED_STACK_TOKENS.any { it in frame } }
-
-    private fun tracerPid(): Int =
-        probe.readText("/proc/self/status").orEmpty().lineSequence()
-            .firstOrNull { it.startsWith("TracerPid:") }
-            ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
-
-    private inline fun check(block: () -> Boolean): Boolean = try {
-        block()
-    } catch (_: Throwable) {
-        false
-    }
-
-    private inline fun <T> safe(block: () -> T?): T? = try {
-        block()
-    } catch (_: Throwable) {
-        null
+    /** TracerPid from /proc/self/status; a missing or garbled line is MALFORMED, not "not traced". */
+    private fun tracer(): CheckResult = when (val r = read("/proc/self/status")) {
+        is TextRead.Failed -> CheckResult.unavailable(r.reason)
+        is TextRead.Ok -> r.text.lineSequence().firstOrNull { it.startsWith("TracerPid:") }
+            ?.substringAfter(':')?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
+            ?.let { CheckResult.of(it > 0) }
+            ?: CheckResult.unavailable(CheckReason.MALFORMED)
     }
 
     companion object {
+        /** Version of the additive `_status` / `_reason` fields; the wire format stays "v": 1. */
+        const val COVERAGE_VERSION = 1
         const val DEVELOPMENT_SETTINGS_ENABLED = "development_settings_enabled"
         const val ADB_ENABLED = "adb_enabled"
 

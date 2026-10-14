@@ -11,21 +11,43 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Debug
 import android.provider.Settings
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import android.view.accessibility.AccessibilityManager
 import java.io.File
+import java.io.FileNotFoundException
+import java.net.ConnectException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.MessageDigest
 
-/** Real [SignalProbe] backed by Android APIs. Every method swallows errors. */
+/**
+ * Real [SignalProbe] backed by Android APIs. A completed query returns its
+ * answer; a refused or failed query throws (or reports INACCESSIBLE / a
+ * [TextRead.Failed] reason) so the collector records UNAVAILABLE rather than
+ * "not detected". See the coverage contract on [SignalProbe].
+ */
 class AndroidSignalProbe(context: Context) : SignalProbe {
     private val app = context.applicationContext
     private val pm: PackageManager = app.packageManager
 
-    override fun fileExists(path: String): Boolean = runCatching { File(path).exists() }.getOrDefault(false)
+    override fun fileExists(path: String): Boolean = pathState(path) == PathState.PRESENT
 
-    override fun readText(path: String): String? = runCatching {
+    /** stat(2) separates a missing path (ENOENT/ENOTDIR) from one the sandbox will not let us see. */
+    override fun pathState(path: String): PathState = try {
+        Os.stat(path)
+        PathState.PRESENT
+    } catch (e: ErrnoException) {
+        if (e.errno == OsConstants.ENOENT || e.errno == OsConstants.ENOTDIR) PathState.ABSENT else PathState.INACCESSIBLE
+    } catch (_: Exception) {
+        PathState.INACCESSIBLE
+    }
+
+    override fun readText(path: String): String? = (readTextResult(path) as? TextRead.Ok)?.text
+
+    override fun readTextResult(path: String): TextRead = try {
         File(path).inputStream().use { input ->
             val buf = ByteArray(MAX_READ)
             var total = 0
@@ -34,10 +56,23 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
                 if (n < 0) break
                 total += n
             }
-            if ((total == MAX_READ && input.read() != -1) || (0 until total).any { buf[it] == 0.toByte() }) null
-            else String(buf, 0, total, Charsets.UTF_8)
+            when {
+                total == MAX_READ && input.read() != -1 -> TextRead.Failed(CheckReason.TOO_LARGE)
+                (0 until total).any { buf[it] == 0.toByte() } -> TextRead.Failed(CheckReason.MALFORMED)
+                else -> TextRead.Ok(String(buf, 0, total, Charsets.UTF_8))
+            }
         }
-    }.getOrNull()
+    } catch (e: FileNotFoundException) {
+        val errno = (e.cause as? ErrnoException)?.errno
+        TextRead.Failed(
+            if (errno == OsConstants.EACCES || errno == OsConstants.EPERM || e.message.orEmpty().contains("Permission denied"))
+                CheckReason.ACCESS_DENIED else CheckReason.READ_ERROR,
+        )
+    } catch (_: SecurityException) {
+        TextRead.Failed(CheckReason.ACCESS_DENIED)
+    } catch (_: Exception) {
+        TextRead.Failed(CheckReason.READ_ERROR)
+    }
 
     override fun pathDirectories(): List<String> =
         System.getenv("PATH").orEmpty().split(':').filter(String::isNotBlank)
@@ -55,15 +90,22 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
         release = Build.VERSION.RELEASE.orEmpty(),
     )
 
-    override fun isPackageInstalled(packageName: String): Boolean = runCatching {
+    /** Visible because every queried package is declared in the manifest's <queries>. */
+    override fun isPackageInstalled(packageName: String): Boolean = try {
         packageInfo(packageName, 0)
         true
-    }.getOrDefault(false)
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
+    }
 
-    override fun globalSettingInt(name: String): Int? =
-        runCatching { Settings.Global.getInt(app.contentResolver, name) }.getOrNull()
+    /** An unset setting has its platform default, which is 0 (off) for both settings we read. */
+    override fun globalSettingInt(name: String): Int? = try {
+        Settings.Global.getInt(app.contentResolver, name)
+    } catch (_: Settings.SettingNotFoundException) {
+        0
+    }
 
-    override fun enabledAccessibilityServices(): List<AccessibilityServiceRef> = runCatching {
+    override fun enabledAccessibilityServices(): List<AccessibilityServiceRef> =
         app.getSystemService(AccessibilityManager::class.java)
             .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
             .mapNotNull { info ->
@@ -74,60 +116,63 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
                     isSystemApp = flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0,
                 )
             }
-    }.getOrDefault(emptyList())
 
     override fun isDebuggerConnected(): Boolean = Debug.isDebuggerConnected() || Debug.waitingForDebugger()
 
     override fun isAppDebuggable(): Boolean = app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
-    override fun installerPackage(): String? = runCatching {
+    override fun installerPackage(): String? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             pm.getInstallSourceInfo(app.packageName).installingPackageName
         } else {
             @Suppress("DEPRECATION")
             pm.getInstallerPackageName(app.packageName)
         }
-    }.getOrNull()
 
-    override fun signingCertSha256(): String? = runCatching {
+    override fun signingCertSha256(): String? {
         val cert = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val info = packageInfo(app.packageName, PackageManager.GET_SIGNING_CERTIFICATES).signingInfo
-                ?: return@runCatching null
+                ?: return null
             if (info.hasMultipleSigners()) info.apkContentsSigners.first() else info.signingCertificateHistory.last()
         } else {
             @Suppress("DEPRECATION")
             packageInfo(app.packageName, PackageManager.GET_SIGNATURES).signatures?.first()
-        } ?: return@runCatching null
-        MessageDigest.getInstance("SHA-256").digest(cert.toByteArray()).joinToString("") { "%02x".format(it) }
-    }.getOrNull()
+        } ?: return null
+        return MessageDigest.getInstance("SHA-256").digest(cert.toByteArray()).joinToString("") { "%02x".format(it) }
+    }
 
-    override fun canConnectLoopback(port: Int): Boolean = runCatching {
+    /** Refused = closed port (completed). Timeouts and permission errors propagate as "could not verify". */
+    override fun canConnectLoopback(port: Int): Boolean = try {
         Socket().use { it.connect(InetSocketAddress(InetAddress.getLoopbackAddress(), port), LOOPBACK_TIMEOUT_MS) }
         true
-    }.getOrDefault(false)
+    } catch (_: ConnectException) {
+        false
+    }
 
-    override fun classExists(name: String): Boolean = runCatching {
+    override fun classExists(name: String): Boolean = try {
         Class.forName(name, false, ClassLoader.getSystemClassLoader())
         true
-    }.getOrDefault(false)
+    } catch (_: ClassNotFoundException) {
+        false
+    }
 
     override fun currentStackTrace(): List<String> =
         Throwable().stackTrace.map { "${it.className}.${it.methodName}" }
 
-    override fun isVpnActive(): Boolean = runCatching {
+    override fun isVpnActive(): Boolean {
         val cm = app.getSystemService(ConnectivityManager::class.java)
-        cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
-    }.getOrDefault(false)
+        return cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+    }
 
-    override fun isInCall(): Boolean = runCatching {
+    override fun isInCall(): Boolean {
         val mode = app.getSystemService(AudioManager::class.java).mode
-        mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
-    }.getOrDefault(false)
+        return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
+    }
 
-    override fun hasExternalDisplay(): Boolean = runCatching {
+    override fun hasExternalDisplay(): Boolean {
         val dm = app.getSystemService(DisplayManager::class.java)
-        dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).isNotEmpty() || dm.displays.size > 1
-    }.getOrDefault(false)
+        return dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).isNotEmpty() || dm.displays.size > 1
+    }
 
     private fun packageInfo(name: String, flags: Int) =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

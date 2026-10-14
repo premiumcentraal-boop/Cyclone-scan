@@ -48,6 +48,25 @@ STR_SIGNALS = NATIVE_STATUS_SIGNALS | NATIVE_COMPARISON_SIGNALS | KOTLIN_COMPARI
 })
 LIST_SIGNALS = frozenset({"env_remote_access_apps"})
 
+# Run 14 coverage metadata (additive; the wire stays "v": 1 and old clients
+# that omit it keep working). Each Kotlin check may carry a typed state and a
+# bounded reason so "could not verify" is never mistaken for "not detected".
+SIGNAL_COVERAGE_VERSIONS = frozenset({1})
+CHECK_STATES = frozenset({"DETECTED", "NOT_DETECTED", "UNAVAILABLE", "UNSUPPORTED"})
+VALUE_STATES = frozenset({"COLLECTED", "UNAVAILABLE", "UNSUPPORTED"})
+CHECK_REASONS = frozenset({
+    "COMPLETED", "ACCESS_DENIED", "PARTIAL_COVERAGE", "READ_ERROR", "MALFORMED", "TOO_LARGE",
+    "API_ERROR", "API_UNSUPPORTED",
+})
+LEGACY_BOOL_SIGNALS = BOOL_SIGNALS - NATIVE_BOOL_SIGNALS
+COUNTED_SIGNALS = INT_SIGNALS | LIST_SIGNALS
+VALUE_SIGNALS = frozenset({"app_installer", "app_signature_sha256", "os_security_patch", "os_release"})
+CHECK_STATUS_SIGNALS = frozenset(k + "_status" for k in LEGACY_BOOL_SIGNALS | COUNTED_SIGNALS)
+VALUE_STATUS_SIGNALS = frozenset(k + "_status" for k in VALUE_SIGNALS)
+REASON_SIGNALS = frozenset(k + "_reason" for k in LEGACY_BOOL_SIGNALS | COUNTED_SIGNALS | VALUE_SIGNALS)
+COVERAGE_SIGNALS = CHECK_STATUS_SIGNALS | VALUE_STATUS_SIGNALS | REASON_SIGNALS
+_COMPLETE = frozenset({"DETECTED", "NOT_DETECTED", "COLLECTED"})
+
 MAX_STR = 128
 MAX_LIST = 32
 _TOKEN = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
@@ -64,8 +83,19 @@ def parse_client_signals(raw: object) -> dict:
     if type(raw.get("v")) is not int or raw["v"] != SIGNALS_VERSION:
         raise SignalsError("unsupported signals version")
     out: dict = {}
+    if "signal_coverage_version" in raw:
+        cv = raw["signal_coverage_version"]
+        if type(cv) is not int or cv not in SIGNAL_COVERAGE_VERSIONS:
+            raise SignalsError("unsupported signal coverage version")
+        out["signal_coverage_version"] = cv
     for key, value in raw.items():
-        if key in BOOL_SIGNALS:
+        if key in COVERAGE_SIGNALS:
+            allowed = (CHECK_STATES if key in CHECK_STATUS_SIGNALS
+                       else VALUE_STATES if key in VALUE_STATUS_SIGNALS else CHECK_REASONS)
+            if not isinstance(value, str) or value not in allowed:
+                raise SignalsError(f"{key} has an invalid value")
+            out[key] = value
+        elif key in BOOL_SIGNALS:
             if type(value) is not bool:
                 raise SignalsError(f"{key} must be a boolean")
             out[key] = value
@@ -100,4 +130,41 @@ def parse_client_signals(raw: object) -> dict:
             raise SignalsError(f"{key} must have DETECTED status")
         if state == "DETECTED" and out.get(key) is not True:
             raise SignalsError(f"{key} status contradicts detection")
+    _check_coverage(out)
     return out
+
+
+def _check_coverage(out: dict) -> None:
+    """Typed states must agree with the values they describe (Run 14)."""
+    for key in LEGACY_BOOL_SIGNALS | COUNTED_SIGNALS | VALUE_SIGNALS:
+        state = out.get(key + "_status")
+        reason = out.get(key + "_reason")
+        if reason is not None and state is None:
+            raise SignalsError(f"{key}_reason requires {key}_status")
+        if state is None:
+            continue
+        if key not in out:
+            raise SignalsError(f"{key}_status without {key}")
+        if reason is not None and (reason == "COMPLETED") != (state in _COMPLETE):
+            raise SignalsError(f"{key}_reason contradicts {key}_status")
+        value = out[key]
+        if key in VALUE_SIGNALS:
+            if state != "COLLECTED" and value is not None:
+                raise SignalsError(f"{key} must be null unless collected")
+            continue
+        hit = value is True if key in LEGACY_BOOL_SIGNALS else bool(value)
+        if hit != (state == "DETECTED"):
+            raise SignalsError(f"{key} status contradicts detection")
+
+
+def coverage_summary(signals: dict | None) -> dict:
+    """Counts of Kotlin check states, for explanations and admin views.
+
+    A report from a client older than Run 14 has no states; its checks are
+    counted as UNREPORTED rather than assumed complete.
+    """
+    counts = {s: 0 for s in sorted(CHECK_STATES | {"UNREPORTED"})}
+    for key in sorted(LEGACY_BOOL_SIGNALS | COUNTED_SIGNALS):
+        state = (signals or {}).get(key + "_status")
+        counts[state if state in CHECK_STATES else "UNREPORTED"] += 1
+    return counts

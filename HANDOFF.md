@@ -4,6 +4,10 @@ Android device-integrity / anti-fraud SDK for neo-banks: an Android client libra
 plus a Python decision service. The phone gathers hardware-signed evidence and
 device signals; **the server makes every ALLOW / STEP_UP / BLOCK decision.**
 
+**Current state (Run 14):** the delegated Run 14–19 plan and its living build log are in
+[docs/BUILD_LOG.md](docs/BUILD_LOG.md). PR #6 stacks `run-13-native-integrity` on #5, and the
+Run 14 PR stacks `run-14-report-coverage` on #6; the branch table below predates them.
+
 This file is the pick-up point for another agent. Earlier runs below are built, tested and pushed. Run 13 additions are described in
 [docs/RUN_13_NATIVE.md](docs/RUN_13_NATIVE.md); see the latest PR CI for validation. Nothing has been run on a physical device yet (deliberate:
 real-device verification is scheduled after the build runs).

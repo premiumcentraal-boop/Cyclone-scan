@@ -104,7 +104,7 @@ private fun StepCard(step: ServerStep) {
 }
 
 private fun copyPolicy(context: Context) {
-    val digest = AndroidSignalProbe(context).signingCertSha256().orEmpty()
+    val digest = runCatching { AndroidSignalProbe(context).signingCertSha256() }.getOrNull().orEmpty()
     val policy = JSONObject()
         .put("package_name", context.packageName)
         .put("signing_cert_sha256", JSONArray(listOf(digest)))

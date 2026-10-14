@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.devicetrust.scanner.attest.Check
 import com.devicetrust.scanner.risk.LocalRisk
+import com.devicetrust.scanner.scan.LayerState
 import com.devicetrust.scanner.scan.ScanResult
 import com.devicetrust.scanner.scan.Verdict
 
@@ -45,9 +46,10 @@ fun ScanScreen(state: ScanState, onScan: () -> Unit) {
             subtitle = "Android ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}",
         ) {
             Text(
-                "Creates a hardware-backed key, verifies its attestation against Google's roots and " +
+                "Local diagnostic: creates a hardware-backed key, verifies its attestation against Google's roots and " +
                     "revocation list, checks for root, hooking, emulators, tampering and scam signals, " +
-                    "then scores the phone with the same weights the server uses.",
+                    "then scores the phone with the same weights the server uses. Play Integrity and server checks " +
+                    "do not run in this mode.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -73,7 +75,14 @@ fun ScanScreen(state: ScanState, onScan: () -> Unit) {
 @Composable
 private fun ScanResultView(result: ScanResult) {
     val context = LocalContext.current
+    val layers = result.layers
     VerdictCard(result)
+
+    SectionCard("Verification coverage", "Local mode · what ran on this phone and what did not") {
+        layers.forEach { layer ->
+            CheckRow(layer.label, layerStatus(layer.state), layerText(layer.state) + " · " + layer.detail)
+        }
+    }
 
     if (result.hardFailures.isNotEmpty()) {
         SectionCard("Blocking findings", "Hard gates: any one of these blocks the device regardless of score") {
@@ -100,7 +109,7 @@ private fun ScanResultView(result: ScanResult) {
         result.attestation.checks.forEach { CheckRow(it.label, it.status, it.detail) }
     }
 
-    signalGroups(result.signals, result.factors).forEach { group ->
+    signalGroups(result.signals, result.factors, result.evidence, result.attestedSignerAvailable).forEach { group ->
         SectionCard(group.title) { group.rows.forEach { CheckRow(it.label, it.status, it.detail) } }
     }
 
@@ -163,9 +172,18 @@ private fun VerdictCard(result: ScanResult) {
                 color = color,
                 trackColor = Color.Gray.copy(alpha = 0.2f),
             )
+            val incomplete = result.findings.count { !it.state.completed }
+            if (incomplete > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "$incomplete on-phone check(s) could not be verified. A low score is not evidence that they are clean.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Allow below ${LocalRisk.ALLOW_BELOW} · step-up below ${LocalRisk.BLOCK_AT} · block at ${LocalRisk.BLOCK_AT}+",
+                "Risk points, not a probability · allow below ${LocalRisk.ALLOW_BELOW} · step-up below ${LocalRisk.BLOCK_AT} · block at ${LocalRisk.BLOCK_AT}+",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -179,6 +197,21 @@ private data class Quad(
     val title: String,
     val line: String,
 )
+
+private fun layerStatus(state: LayerState): Check.Status = when (state) {
+    LayerState.VERIFIED, LayerState.COMPLETE -> Check.Status.PASS
+    LayerState.FAILED -> Check.Status.FAIL
+    LayerState.PARTIAL, LayerState.UNAVAILABLE, LayerState.NOT_EVALUATED -> Check.Status.UNVERIFIED
+}
+
+private fun layerText(state: LayerState): String = when (state) {
+    LayerState.VERIFIED -> "verified"
+    LayerState.FAILED -> "failed"
+    LayerState.COMPLETE -> "all checks completed"
+    LayerState.PARTIAL -> "partially completed"
+    LayerState.UNAVAILABLE -> "unavailable"
+    LayerState.NOT_EVALUATED -> "not evaluated"
+}
 
 @Suppress("unused")
 private fun Check.Status.isBad() = this == Check.Status.FAIL
