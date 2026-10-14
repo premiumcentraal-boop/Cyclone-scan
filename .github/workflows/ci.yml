@@ -88,9 +88,18 @@ jobs:
       - name: Verify native ABI packaging and owned code bounds
         working-directory: .
         run: python3 tools/check_native_apk.py
+      - name: Record tested revision and APK digest
+        working-directory: .
+        run: >-
+          python3 -m tools.assurance.artifact_manifest
+          android/scanner/build/outputs/apk/release/scanner-release.apk
+          --revision "$(git rev-parse HEAD)"
+          > android/scanner/build/outputs/apk/release/scanner-assurance-manifest.json
       - name: Upload scanner APK
         uses: actions/upload-artifact@v4
         with:
           name: device-trust-scanner-apk
-          path: android/scanner/build/outputs/apk/release/scanner-release.apk
+          path: |
+            android/scanner/build/outputs/apk/release/scanner-release.apk
+            android/scanner/build/outputs/apk/release/scanner-assurance-manifest.json
           if-no-files-found: error
