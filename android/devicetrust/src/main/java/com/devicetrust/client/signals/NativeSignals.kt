@@ -77,6 +77,6 @@ object NativeSignals {
         report.put("native_kotlin_mismatch", mismatch)
         report.put("native_kotlin_mismatch_status",
             if (mismatch) "DETECTED" else if (comparisons.isEmpty()) "UNAVAILABLE" else "NOT_DETECTED")
-        report.put("native_collector_version", "1")
+        report.put("native_collector_version", "2")
     }
 }
