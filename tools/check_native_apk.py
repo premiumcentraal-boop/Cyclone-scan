@@ -1,4 +1,4 @@
-"""Verify the shipped ABIs and the bounded, owned function ranges used for baselines."""
+"""Verify shipped ABIs and required executable-text measurement entry points."""
 import os
 import subprocess
 from pathlib import Path
@@ -22,9 +22,9 @@ for lib in Path("android/devicetrust").rglob("libdtnative.so"):
     sizes = {}
     for line in output.splitlines():
         parts = line.split()
-        if len(parts) >= 4 and parts[-1] in {"dt_collect", "dt_read", "dt_tracer"}:
+        if len(parts) >= 4 and parts[-1] in {"dt_collect", "dt_read", "dt_elf_capture", "dt_elf_check"}:
             sizes[parts[-1]] = int(parts[1], 16)
-    assert len(sizes) == 3 and all(size >= 16 for size in sizes.values()), (lib, sizes)
+    assert len(sizes) == 4 and all(size >= 16 for size in sizes.values()), (lib, sizes)
     checked.add(abi)
 assert checked == ABIS, checked
-print("Native ABI packaging and all nine owned code ranges verified")
+print("Native ABI packaging and executable-text measurement entry points verified")
