@@ -157,7 +157,7 @@ def test_play_outage_is_warning_when_not_required(policy, pki):
     client, _ = build(policy, pki, decoder=FakeDecoder(fail=True))
     data = device_enroll(client, pki, play=True)[0].json()
     assert data["decision"] == "ALLOW"
-    assert data["warnings"] == [R.PLAY_INTEGRITY_UNAVAILABLE]
+    assert data["warnings"] == [R.ENROLLMENT_LEGACY_UNBOUND, R.PLAY_INTEGRITY_UNAVAILABLE]
 
 
 def test_play_outage_blocks_when_required(policy, pki):
