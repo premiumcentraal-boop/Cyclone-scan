@@ -10,7 +10,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 14 report coverage | CI_PASSED | d4667c1 → 63fd3bd | PR #8 (ready for review); CI 38646802172 | UNVERIFIED | Scanner 0.7.0; 303 Python tests; 59 vectors |
 | 15 verifier compatibility | CI_PASSED | 63fd3bd → 3d68781 | PR #14; CI 38648998069 | UNVERIFIED | 335 Python tests; 60 risk + 14 attestation vectors |
 | 15b integrate Runs 20–25 | CI_PASSED | 69e3bc5 + 2cd8d99 → 04996b5 | PR #15; CI 38650877770 | UNVERIFIED | Merge of the parallel stack; 390 Python tests |
-| 16 device lifecycle | IMPLEMENTED | 04996b5 → see entry | see entry | UNVERIFIED | States, ownership, migrations |
+| 16 device lifecycle | CI_PASSED | 04996b5 → e042e7d | PR #17; CI 38652134596 | UNVERIFIED | 408 Python tests; states, ownership, migrations |
 | 17 server scan/history | PLANNED | Run 16 successor | Not created | Not executed | External Google setup may be needed |
 | 18 beta packaging | PLANNED | Run 17 successor | Not created | Not executed | Stable signing setup dependency |
 | 19 beta validation | PLANNED | Run 18 successor | Not created | Not executed | Normal-device matrix |
@@ -66,14 +66,14 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
 - Build-status note: this log is authoritative; Runs 20–25 scope and handoff live in [assurance/BUILD_STATUS.md](assurance/BUILD_STATUS.md).
 
 ### Run 16 — Enrollment and device lifecycle
-- State: IMPLEMENTED (CI recorded below once available)
-- Started/completed: 15 October 2026 / —
+- State: CI_PASSED (not DEVICE_VERIFIED; not merged)
+- Started/completed: 15 October 2026 / 15 October 2026
 - Exact base SHA: 04996b51fc7f691e43e3412f1ce7b7abb6a5bac9 (`run-15b-integrate-20-25`, PR #15)
-- Head SHA: —
-- Branch / PR: `run-16-device-lifecycle` → base `run-15b-integrate-20-25`; PR —
+- Head SHA: e042e7d1a2e0c62a618bb5f3bf731658792f9c73 (code)
+- Branch / PR: `run-16-device-lifecycle` → base `run-15b-integrate-20-25`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/17
 - Changes delivered: see [RUN_16_DEVICE_LIFECYCLE.md](RUN_16_DEVICE_LIFECYCLE.md)
 - Automated checks actually run: local Python 3.13 `python -m pytest service/tests` → 408 passed (390 + 18 new); vectors unchanged. Android: PR CI only.
-- CI URL and outcome: —
+- CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38652134596 — SUCCESS (native, Python, Android tests/lint/builds, cross-language signal and enrollment-transcript steps, ABI check, manifest).
 - Physical device / OS / app version: none (UNVERIFIED)
 - Migration implications: user_version 0 databases (Phase 1, Run 13, Run 22) are adopted and upgraded to 2 in place; STEP_UP enrollments now start pending (behaviour change, documented).
 - External dependencies: the customer's authenticated backend must forward the gateway principal for ownership; none for tests.
