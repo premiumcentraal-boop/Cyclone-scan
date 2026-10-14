@@ -3,7 +3,7 @@ import argparse
 import datetime as dt
 import json
 import math
-from .lab import read_document, validate_document
+from .lab import read_document, validate_document, validate_candidate
 
 def _rate(errors,total):
     if not total:return {"errors":0,"devices":0,"rate":None,"wilson95":None}
@@ -27,6 +27,7 @@ def score_band(row,allow_below,block_at):
     return "ALLOW"
 
 def evaluate(document,revision,apk_sha256,allow_below=50,block_at=80,min_clean_devices=5,min_altered_devices=3):
+    validate_candidate(revision,apk_sha256)
     if not all(type(v) is int for v in (allow_below,block_at,min_clean_devices,min_altered_devices)):
         raise ValueError("integer evaluation settings required")
     if not 0<allow_below<=block_at<=101 or min_clean_devices<1 or min_altered_devices<1:
@@ -36,7 +37,7 @@ def evaluate(document,revision,apk_sha256,allow_below=50,block_at=80,min_clean_d
     measured=[r for r in selected if r["origin"]!="SYNTHETIC" and r["operator_verified"]]
     # Repeated scans do not create additional independent accuracy samples.
     latest={}
-    for row in sorted(measured,key=lambda r:(dt.datetime.fromisoformat(r["observed_at"]).timestamp(),r["observation_id"])):
+    for row in sorted(measured,key=lambda r:(dt.datetime.fromisoformat(r["observed_at"]),r["observation_id"])):
         latest[(row["device_alias"],row["case_id"])]=row
     measurements=list(latest.values())
     eligible=[r for r in measurements if r["coverage"]=="COMPLETE" and not r["crashed"] and
