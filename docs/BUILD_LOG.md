@@ -13,7 +13,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 16 device lifecycle | CI_PASSED | 04996b5 → e042e7d | PR #17; CI 38652134596 | UNVERIFIED | 408 Python tests; states, ownership, migrations |
 | 17 server scan/history | CI_PASSED | 78f8c7b → 07039e1 | PR #18; CI 38667401633 | UNVERIFIED | 488 Python tests; scanner 0.8.0; live Google decode not exercised |
 | 18 beta packaging | CI_PASSED | 165d639 → 7b05048 | PR #19; CI 38673627448, 38674219916 | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
-| 19 beta validation | BLOCKED | 7b05048 → (see Run 19 entry) | see Run 19 entry | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
+| 19 beta validation | BLOCKED | 7b05048 → c48221b | PR #20; CI 38674872520 (green) | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
 
 ### Run 14 — Report coverage and result accuracy
 - State: CI_PASSED (not DEVICE_VERIFIED; not merged)
@@ -144,7 +144,8 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
 - State: BLOCKED for physical validation. Delivered: connectivity record, operator runbook for the 17-case matrix, and an actual beta-checklist run → **NO_GO**. Not DEVICE_VERIFIED; nothing published.
 - Date: 15 October 2026
 - Exact base SHA: 7b05048 (`run-18-beta-packaging`, PR #19, CI 38674219916 green)
-- Branch / PR: `run-19-device-validation` → base `run-18-beta-packaging` (stacked draft PR)
+- Branch / PR: `run-19-device-validation` → base `run-18-beta-packaging`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/20
+- Head SHA: c48221b; CI https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38674872520 — SUCCESS (all four jobs). CI success is not device validation.
 - Connectivity, checked afresh:
   - no phone-gateway tool in this session
   - `adb devices`: none
