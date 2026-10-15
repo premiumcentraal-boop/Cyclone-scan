@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "source": "GitHub Actions run 38674219916 (run-18-beta-packaging @ 7b05048)",
+  "ci_run": "https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38674219916",
+  "apk_artifact_id": 11945646310,
+  "tested_revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+  "scanner_apk_sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+  "aar_sha256": "cfec9555f299d3be8f7377d454b60156963af269e707e57634e9188bbef5ebb7",
+  "signing": {
+    "verified_by": "apksigner",
+    "identity": "TEST_DEBUG_KEY",
+    "signer_sha256": [
+      "a3be9322210b985228ab17325b256403448e5035fcc5e4d2812ca9238abe45ee"
+    ]
+  },
+  "version": "0.9.0-beta.1",
+  "version_code": "6",
+  "note": "PR CI builds a synthetic merge revision; use tested_revision for observations. TEST_DEBUG_KEY: not a distribution candidate."
+}

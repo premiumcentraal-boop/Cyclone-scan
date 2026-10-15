@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "tested_revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+  "apk_sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+  "apk_size": 2447024,
+  "signer_verification": "UNVERIFIED",
+  "note": "Supply the actual checked-out build revision, including a PR merge revision when applicable. Verify signer separately."
+}

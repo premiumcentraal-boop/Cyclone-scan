@@ -12,8 +12,8 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 15b integrate Runs 20–25 | CI_PASSED | 69e3bc5 + 2cd8d99 → 04996b5 | PR #15; CI 38650877770 | UNVERIFIED | Merge of the parallel stack; 390 Python tests |
 | 16 device lifecycle | CI_PASSED | 04996b5 → e042e7d | PR #17; CI 38652134596 | UNVERIFIED | 408 Python tests; states, ownership, migrations |
 | 17 server scan/history | CI_PASSED | 78f8c7b → 07039e1 | PR #18; CI 38667401633 | UNVERIFIED | 488 Python tests; scanner 0.8.0; live Google decode not exercised |
-| 18 beta packaging | CI_PASSED | 165d639 → b28db16 (+ evidence fix) | PR #19; CI 38673627448 | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
-| 19 beta validation | PLANNED | Run 18 successor | Not created | Not executed | Normal-device matrix |
+| 18 beta packaging | CI_PASSED | 165d639 → 7b05048 | PR #19; CI 38673627448, 38674219916 | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
+| 19 beta validation | BLOCKED | 7b05048 → (see Run 19 entry) | see Run 19 entry | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
 
 ### Run 14 — Report coverage and result accuracy
 - State: CI_PASSED (not DEVICE_VERIFIED; not merged)
@@ -137,4 +137,27 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
 - Physical device / live Google: none (UNVERIFIED).
 - Signing: no approved identity configured; candidates are TEST_DEBUG_KEY. No key was generated.
 - Open owner decisions: signing identity and secrets, project licence (Play Integrity dependency is proprietary), distribution channel, retention schedule.
-- Next run and verified base: Run 19 (device validation) from the Run 18 head.
+- Follow-up 7b05048 (evidence fix): CI https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38674219916 — SUCCESS, signer now verified in CI (TEST_DEBUG_KEY a3be9322…); AAR digest identical to the previous run.
+- Next run and verified base: Run 19 (device validation) from 7b05048.
+
+### Run 19 — Device validation and beta candidate
+- State: BLOCKED for physical validation. Delivered: connectivity record, operator runbook for the 17-case matrix, and an actual beta-checklist run → **NO_GO**. Not DEVICE_VERIFIED; nothing published.
+- Date: 15 October 2026
+- Exact base SHA: 7b05048 (`run-18-beta-packaging`, PR #19, CI 38674219916 green)
+- Branch / PR: `run-19-device-validation` → base `run-18-beta-packaging` (stacked draft PR)
+- Connectivity, checked afresh:
+  - no phone-gateway tool in this session
+  - `adb devices`: none
+  - no `/dev/kvm`, so no emulator
+  - no Play/Cloud configuration
+- Candidate:
+  - CI run 38674219916, tested revision a3ad8978e2c736901d54a7f4c416bf3541a8e541
+  - APK 008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61
+  - AAR cfec9555… (reproducible across two CI runs)
+  - TEST_DEBUG_KEY
+- Checks actually run:
+  - `tools.assurance.lab init` (empty lab)
+  - `tools.assurance.beta_gate`: NO_GO, 31 blockers (docs/validation/beta-gate-result.json)
+  - Python suite including the new `test_validation_record.py`
+- Observations recorded: **none** (physical 0, emulator 0, synthetic 0).
+- Unblock: an authorized reachable phone, a Play-recognized build with Cloud credentials, the owner's signing identity and licence decision, and coordination with the Run 27 native-review owner for the altered cases.
