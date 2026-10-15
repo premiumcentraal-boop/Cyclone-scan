@@ -16,7 +16,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 19 beta validation | BLOCKED | 7b05048 → c48221b | PR #20; CI 38674872520 (green) | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
 | 28 review of 17–19 | CI_PASSED | 24b7a71 → ca9d6e7 | PR #21; CI 38759654224 | UNVERIFIED | Sprint "beta readiness without hardware"; 6 findings, 5 addressed |
 | 29 privacy and retention | CI_PASSED | f98ec72 → 305837f | PR #22; CI 38761296858 | not needed | Retention sweep, erasure, data inventory |
-| 30 phone-test readiness | PLANNED | Run 29 successor | Not created | Not executed | Scanner lab-record export + validator |
+| 30 phone-test readiness | IMPLEMENTED | df19d6d → see entry | see entry | not executed | Scanner lab record + import tool |
 
 ### Run 14 — Report coverage and result accuracy
 - State: CI_PASSED (not DEVICE_VERIFIED; not merged)
@@ -194,3 +194,13 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Automated checks actually run: local Python 3.13 → 530 passed (515 + 15 new).
 - CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38761296858 — SUCCESS (all jobs incl. reference image).
 - Beta-gate approvals: `privacy_retention` stays UNVERIFIED until a human privacy review signs off.
+
+### Run 30 — Phone-test readiness
+- State: IMPLEMENTED (CI recorded below once available)
+- Started: 15 October 2026
+- Exact base SHA: df19d6d (`run-29-privacy-retention`, PR #22)
+- Branch / PR: `run-30-phone-test-readiness` → base `run-29-privacy-retention`; PR —
+- Changes delivered: see [RUN_30_PHONE_TEST_READINESS.md](RUN_30_PHONE_TEST_READINESS.md)
+- Automated checks actually run: local Python 3.13 → 543 passed (530 + 13 new); CI import step simulated locally. Android: CI only.
+- CI URL and outcome: —
+- Physical device: none. The next candidate build must come from this branch or later to use the lab-record button.

@@ -45,6 +45,7 @@ fun ServerScreen(
     serverScan: ServerScan?,
     onVerifiedScan: () -> Unit,
     onRotateKeys: () -> Unit,
+    onShareLabRecord: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -107,6 +108,19 @@ fun ServerScreen(
             }
         }
         steps.forEach { StepCard(it) }
+        if (onShareLabRecord != null) {
+            SectionCard("Lab record (testers)", "For the device-validation matrix (docs/RUN_19_DEVICE_VALIDATION.md)") {
+                Text(
+                    "Shares what this app measured: its own APK digest, the OS, the latest local scan and server-verified " +
+                        "scan. You add the case, phone alias and outcome on your computer with tools.assurance.lab_import. " +
+                        "No serial, IMEI, account data or server address is included.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(onClick = onShareLabRecord, enabled = !running, modifier = Modifier.fillMaxWidth()) {
+                    Text("Share lab record (JSON)")
+                }
+            }
+        }
     }
 }
 

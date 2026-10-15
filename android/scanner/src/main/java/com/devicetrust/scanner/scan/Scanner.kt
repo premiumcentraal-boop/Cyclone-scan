@@ -33,6 +33,8 @@ class ScanResult(
     val evidence: LocalRisk.Evidence? = null,
     /** True only when the attestation listed this app's signer, so the signature row compared something. */
     val attestedSignerAvailable: Boolean = false,
+    /** Run 30: the installed app's versionName (the constant was not bumped by later runs). */
+    val scannerVersion: String = SCANNER_VERSION,
 ) {
     val hardFailures: List<Check> get() = attestation.hardFailures
     val findings: List<Finding> get() = ReportCoverage.findings(signals)
@@ -48,7 +50,7 @@ class ScanResult(
     fun toJson(): JSONObject = JSONObject().apply {
         put("reportSchema", ReportCoverage.SCHEMA)
         put("reportSchemaVersion", ReportCoverage.SCHEMA_VERSION)
-        put("scanner", "device-trust-scanner/$SCANNER_VERSION")
+        put("scanner", "device-trust-scanner/$scannerVersion")
         put("evaluationMode", "LOCAL_DIAGNOSTIC")
         put("playIntegrityEvaluated", false)
         put("fleetEvaluated", false)
@@ -195,6 +197,8 @@ class Scanner(private val context: Context) {
             scannedAt = Date(started),
             evidence = evidence,
             attestedSignerAvailable = attestedSigners.isNotEmpty(),
+            scannerVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+                .getOrNull() ?: SCANNER_VERSION,
         )
     }
 }

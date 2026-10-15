@@ -126,6 +126,18 @@ jobs:
           PYTHONPATH=service python3 tools/check_scan_fixtures.py
           android/devicetrust/build/scan-transcript-detected.json
           android/devicetrust/build/key-rotation-transcript.json
+      - name: Scanner lab record imports as a lab observation (Run 30)
+        working-directory: .
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          rec = json.loads(pathlib.Path("android/scanner/build/lab-record-sample.json").read_text())
+          pathlib.Path("/tmp/candidate.json").write_text(json.dumps(
+              {"tested_revision": "1" * 40, "scanner_apk_sha256": rec["apkSha256"]}))
+          PY
+          python3 -m tools.assurance.lab_import android/scanner/build/lab-record-sample.json \
+            --candidate /tmp/candidate.json --case clean_pixel --alias ci-sample \
+            --ground-truth CLEAN --expectation-met unknown
       - name: Verify native ABI packaging and owned code bounds
         working-directory: .
         run: python3 tools/check_native_apk.py

@@ -1,5 +1,6 @@
 package com.devicetrust.scanner
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -79,10 +80,23 @@ class MainActivity : FragmentActivity() {
                         serverScan = vm.serverScan,
                         onVerifiedScan = { vm.runVerifiedScan(this@MainActivity) },
                         onRotateKeys = { vm.runKeyRotation(this@MainActivity) },
+                        onShareLabRecord = { shareLabRecord(vm) },
                     )
                 }
             }
         }
+    }
+}
+
+/** Run 30: share the measured lab record; the operator adds case, alias and outcome on a computer. */
+private fun FragmentActivity.shareLabRecord(vm: ScannerViewModel) {
+    vm.withLabRecord { record ->
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_SUBJECT, "Cyclone Scan lab record")
+            putExtra(Intent.EXTRA_TEXT, record)
+        }
+        startActivity(Intent.createChooser(send, "Share lab record"))
     }
 }
 
