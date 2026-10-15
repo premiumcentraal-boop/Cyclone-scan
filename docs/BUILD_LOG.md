@@ -12,7 +12,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 15b integrate Runs 20–25 | CI_PASSED | 69e3bc5 + 2cd8d99 → 04996b5 | PR #15; CI 38650877770 | UNVERIFIED | Merge of the parallel stack; 390 Python tests |
 | 16 device lifecycle | CI_PASSED | 04996b5 → e042e7d | PR #17; CI 38652134596 | UNVERIFIED | 408 Python tests; states, ownership, migrations |
 | 17 server scan/history | CI_PASSED | 78f8c7b → 07039e1 | PR #18; CI 38667401633 | UNVERIFIED | 488 Python tests; scanner 0.8.0; live Google decode not exercised |
-| 18 beta packaging | IMPLEMENTED | 165d639 → (see Run 18 entry) | see Run 18 entry | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
+| 18 beta packaging | CI_PASSED | 165d639 → b28db16 (+ evidence fix) | PR #19; CI 38673627448 | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
 | 19 beta validation | PLANNED | Run 18 successor | Not created | Not executed | Normal-device matrix |
 
 ### Run 14 — Report coverage and result accuracy
@@ -118,7 +118,7 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
 - Next run and verified base: Run 18 (`run-18-beta-packaging`) from the Run 17 head.
 
 ### Run 18 — Beta packaging and reference deployment
-- State: IMPLEMENTED; CI pending. Not DEVICE_VERIFIED; not merged; not published.
+- State: CI_PASSED on b28db16 (not DEVICE_VERIFIED; not merged; not published)
 - Started/completed: 15 October 2026
 - Exact base SHA: 165d63905cb73f6349cad1a13aa046b4f0dc38d6 (`run-17-verified-scan-history`, PR #18, CI green on 07039e1; later commits are log-only)
 - Branch / PR: `run-18-beta-packaging` → base `run-17-verified-scan-history` (stacked draft PR)
@@ -131,7 +131,9 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
   - `build_evidence` and `check_signing` ran against the real APK: TEST_DEBUG_KEY, signer 64abdca3….
   - Local process smoke test of `serve` + `serve-admin` on one database: 401 / 201 / 404 / 404 / 200 as the CI job asserts.
   - Docker: client only, no daemon in the container. The image build and container smoke test are verified only by the new CI job.
-- CI URL and outcome: pending.
+- CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38673627448 (b28db16; tested merge revision 1c09dc3736d148acd2dc3c0cdc4ac2ec9a3fa964) — SUCCESS: native, Python, Android (incl. AAR rebuild/publish, sample build, build evidence) and the new reference-image job (image build, config check incl. placeholder failure, compose validation, client/admin container route separation).
+  - CI candidate: scanner APK sha256 6e755729fcbe1a8130787b1c9487b6fb1dec7cadd606b6f3b7118bb94ddd3be6 (artifact 11945815509), AAR sha256 cfec9555f299d3be8f7377d454b60156963af269e707e57634e9188bbef5ebb7 (artifact 11945490721), `aar_reproducible: true` on the runner (JDK 17.0.20).
+  - Finding: that run's build evidence recorded the signer as UNVERIFIED because the tool picked the runner's newest build-tools apksigner and hid its error. Verified separately with apksigner 35.0.0: signer d68e832fd99afbf2bfce8d052fe5e4587e83017cb9cb3b53f1aca0e2c1d66240, CN=Android Debug, i.e. TEST_DEBUG_KEY (the runner's own debug key, different from the local one). Fixed in the follow-up commit: CI passes build-tools 35.0.0 apksigner and the evidence keeps the error text.
 - Physical device / live Google: none (UNVERIFIED).
 - Signing: no approved identity configured; candidates are TEST_DEBUG_KEY. No key was generated.
 - Open owner decisions: signing identity and secrets, project licence (Play Integrity dependency is proprietary), distribution channel, retention schedule.

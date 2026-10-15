@@ -81,8 +81,9 @@ def evidence(revision: str, android_dir: str, aar: str, apk: str, aar_rebuild: s
         signer = check_signing.evaluate(check_signing.signers(apk, apksigner), set())
         signing = {"verified_by": "apksigner", "identity": signer["identity"],
                    "signer_sha256": [s["sha256"] for s in signer["signers"]]}
-    except (OSError, ValueError):
-        signing = {"verified_by": None, "identity": "UNVERIFIED", "signer_sha256": []}
+    except (OSError, ValueError) as exc:
+        # Recorded, not hidden: a missing or failing apksigner leaves the signer unverified.
+        signing = {"verified_by": None, "identity": "UNVERIFIED", "signer_sha256": [], "error": str(exc)[:300]}
     return {
         "schema": 1,
         "tested_revision": revision,

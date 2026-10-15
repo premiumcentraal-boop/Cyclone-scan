@@ -54,7 +54,8 @@ def signers(apk: str, apksigner: str | None = None) -> list[dict]:
     proc = subprocess.run([apksigner or default_apksigner(), "verify", "--print-certs", apk],
                           capture_output=True, text=True, check=False)
     if proc.returncode != 0:
-        raise ValueError("apksigner could not verify the APK signature")
+        detail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or ["no output"]
+        raise ValueError(f"apksigner could not verify the APK signature: {detail[0][:200]}")
     return parse_apksigner(proc.stdout)
 
 

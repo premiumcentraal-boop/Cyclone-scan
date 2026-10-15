@@ -80,6 +80,7 @@ def test_evidence_records_reproducibility_and_signer(tmp_path):
     unverified = build_evidence.evidence(rev, str(ROOT / "android"), str(aar1), str(apk),
                                          apksigner=str(tmp_path / "missing"), java="17")
     assert unverified["signing"]["identity"] == "UNVERIFIED" and unverified["aar_reproducible"] is None
+    assert unverified["signing"]["error"]
     with pytest.raises(ValueError):
         build_evidence.evidence("HEAD", str(ROOT / "android"), str(aar1), str(apk))
     with pytest.raises(ValueError):

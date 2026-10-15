@@ -147,6 +147,7 @@ jobs:
           --aar-rebuild android/devicetrust/build/outputs/aar/devicetrust-release.aar
           --apk android/scanner/build/outputs/apk/release/scanner-release.apk
           --sample-apk android/sample-integration/app/build/outputs/apk/debug/app-debug.apk
+          --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
           > android/scanner/build/outputs/apk/release/build-evidence.json
           && cat android/scanner/build/outputs/apk/release/build-evidence.json
       - name: Record tested revision and APK digest
