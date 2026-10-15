@@ -1,18 +1,28 @@
 name: Dev pre-release
 
 # Run 19b: a pushed tag v<cyclone.version> (e.g. v0.9.0-dev.1) publishes a GitHub
-# *pre-release* with the dev-signed scanner APK, the SDK Maven repository and the build
+# *pre-release*. A release created first in the GitHub UI with a new tag also triggers
+# this workflow; the assets are then attached to it. It carries the dev-signed scanner
+# APK, the SDK Maven repository and the build
 # evidence. Development builds only: signed with the PUBLIC dev key unless release
 # secrets are configured, never device-validated by this workflow.
 on:
   push:
     tags: ['v*-dev.*']
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
+# A UI-created release can fire both events; build it once.
+concurrency:
+  group: dev-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
+    if: github.event_name == 'push' || contains(github.event.release.tag_name, '-dev.')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -74,7 +84,15 @@ jobs:
 
           Licensed under Apache-2.0. Play Integrity / Play services dependencies are Google-proprietary.
           NOTES
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease \
-            --title "Cyclone Scan $version (development build)" --notes-file "$RUNNER_TEMP/notes.md" \
-            "$RUNNER_TEMP/cyclone-scanner-$version.apk" "$RUNNER_TEMP/devicetrust-maven-repo-$version.zip" \
-            "$RUNNER_TEMP/build-evidence.json" "$RUNNER_TEMP/scanner-assurance-manifest.json"
+          (cd "$RUNNER_TEMP" && sha256sum "cyclone-scanner-$version.apk" "devicetrust-maven-repo-$version.zip" \
+            build-evidence.json scanner-assurance-manifest.json > SHA256SUMS)
+          assets=("$RUNNER_TEMP/cyclone-scanner-$version.apk" "$RUNNER_TEMP/devicetrust-maven-repo-$version.zip"
+                  "$RUNNER_TEMP/build-evidence.json" "$RUNNER_TEMP/scanner-assurance-manifest.json" "$RUNNER_TEMP/SHA256SUMS")
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Created in the GitHub UI: keep its text, mark it pre-release, attach the assets.
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "Cyclone Scan $version (development build)" --notes-file "$RUNNER_TEMP/notes.md" "${assets[@]}"
+          fi
