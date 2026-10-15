@@ -162,6 +162,7 @@ object TrustJson {
         request.newConfirmKeyChain?.let { chain ->
             put("newConfirmKeyChain", JSONArray(chain.map { b64.encodeToString(it) }))
         }
+        request.playIntegrityToken?.let { put("playIntegrityToken", it) }
     }.toString()
 
     private fun decision(raw: String) = when (raw) {

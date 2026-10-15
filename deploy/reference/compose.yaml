@@ -31,6 +31,11 @@ services:
     secrets: [policy.json, admin_token]
     volumes: ["trust-data:/data"]
     networks: [internal]
+    # The image's default health check probes the client port (8080); the admin listener is 8081.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
     # Loopback only: reach it through SSH/VPN, never from the internet.
     ports: ["127.0.0.1:8081:8081"]
 

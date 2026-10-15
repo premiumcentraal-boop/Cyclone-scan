@@ -86,3 +86,11 @@ SCAN_FRESH_ATTESTATION_MISSING = "SCAN_FRESH_ATTESTATION_MISSING"
 FRESH_ATTESTATION_KEY_REUSED = "FRESH_ATTESTATION_KEY_REUSED"  # "fresh" chain is an enrolled/retired key
 KEY_ROTATION_PROOF_INVALID = "KEY_ROTATION_PROOF_INVALID"      # new key did not prove possession
 KEY_ROTATION_CONFLICT = "KEY_ROTATION_CONFLICT"                # device key changed concurrently
+
+# Run 28 review fixes
+# The new key's attestation contradicts the enrolled device (attested model, boot key or
+# lock state changed, or a patch went backwards): not a same-phone rotation. Nothing changes;
+# recovery is an authenticated new enrollment.
+KEY_ROTATION_DEVICE_CHANGED = "KEY_ROTATION_DEVICE_CHANGED"
+# A scan's fresh attestation contradicts the enrolled device's attested evidence -> STEP_UP.
+SCAN_DEVICE_EVIDENCE_CHANGED = "SCAN_DEVICE_EVIDENCE_CHANGED"

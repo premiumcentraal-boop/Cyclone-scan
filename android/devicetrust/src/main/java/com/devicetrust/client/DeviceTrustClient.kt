@@ -278,8 +278,11 @@ class DeviceTrustClient(
                 attester.signer(enrollment.keyAlias).run { update(data); sign() } to
                     attester.signer(alias).run { update(data); sign() }
             }
+            // Run 28: the new key meets the same Play requirement as at enrollment.
+            val token = integrity?.let { source -> playToken(source, RequestHash.keyRotation(data)) }
             val result = api.rotateKey(
-                KeyRotationRequest(enrollment.deviceId, challenge.challengeId, data, oldSignature, newSignature, key.chain, confirm?.chain),
+                KeyRotationRequest(enrollment.deviceId, challenge.challengeId, data, oldSignature, newSignature, key.chain,
+                    confirm?.chain, token),
             )
             if (result.rotated) {
                 store.save(Enrollment(enrollment.deviceId, alias, confirm?.alias))

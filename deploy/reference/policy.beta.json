@@ -26,5 +26,6 @@
   "scan_require_fresh_attestation": true,
   "scan_require_play_integrity": false,
   "scan_result_ttl_seconds": 300,
-  "history_max_snapshots": 50
+  "history_max_snapshots": 50,
+  "scan_history_review": "step_up"
 }
