@@ -10,6 +10,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.devicetrust.client.ServerScan
+import com.devicetrust.scanner.scan.ApkDigest
+import com.devicetrust.scanner.scan.LabRecord
 import com.devicetrust.scanner.attest.Check
 import com.devicetrust.scanner.scan.BiometricTest
 import com.devicetrust.scanner.scan.ScanResult
@@ -46,6 +48,8 @@ class ScannerViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var serverScan by mutableStateOf<ServerScan?>(null)
         private set
+    /** Run 30: the latest server-verified scan with its measured duration, for lab records. */
+    private var serverRun: LabRecord.ServerRun? = null
 
     fun runScan() {
         if (scan == ScanState.Running) return
@@ -103,7 +107,30 @@ class ScannerViewModel(app: Application) : AndroidViewModel(app) {
     /** Run 17: a server verdict on this phone now; every failure is shown as "not server-verified". */
     fun runVerifiedScan(activity: FragmentActivity) = launchServer {
         serverScan = null
-        serverScan = serverTest(activity).verifiedScan()
+        val started = System.currentTimeMillis()
+        val result = serverTest(activity).verifiedScan()
+        val finished = System.currentTimeMillis()
+        serverRun = LabRecord.ServerRun(result, finished - started, finished)
+        serverScan = result
+    }
+
+    /** Run 30: builds the lab record off the main thread and hands it to [onReady] on the main thread. */
+    fun withLabRecord(onReady: (String) -> Unit) {
+        viewModelScope.launch { onReady(labRecord()) }
+    }
+
+    /** Run 30: the lab record for the latest local and server-verified scans (hashes the APK off the main thread). */
+    suspend fun labRecord(): String = withContext(Dispatchers.IO) {
+        val app: Application = getApplication()
+        val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull()
+        LabRecord.build(
+            apkSha256 = ApkDigest.of(app),
+            scannerVersion = version ?: "unknown",
+            os = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
+            local = (scan as? ScanState.Done)?.result,
+            server = serverRun,
+            nowMillis = System.currentTimeMillis(),
+        ).toString(2)
     }
 
     fun runKeyRotation(activity: FragmentActivity) = launchServer {

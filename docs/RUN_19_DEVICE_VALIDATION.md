@@ -53,6 +53,17 @@ For every case:
 3. Compare with the expectation below. Only then set `expectation_met`; `operator_verified` is true only after review.
 4. Record with `python -m tools.assurance.lab record lab.json observation.json`. The schema is in `tools/assurance/lab.py`, with `origin` set to PHYSICAL (EMULATOR only for `emulator`) and the candidate's `revision`/`apk_sha256`.
 
+**Faster path (Run 30; needs a candidate built from Run 30 or later, because the 0.9.0-beta.1 candidate above has no lab-record button):**
+1. After steps 1–2 on the phone, open the Server tab and tap **Share lab record (JSON)**. Send it to your computer.
+2. On the computer, compare with the expectation, then run:
+   ```sh
+   python -m tools.assurance.lab_import record.json --candidate docs/validation/candidate.json \
+     --case clean_pixel --alias pixel-a --ground-truth CLEAN \
+     --expectation-met yes --operator-verified --lab docs/validation/lab.json
+   ```
+   The record supplies everything measured: verdict, score, hard failure, coverage, duration, evidence codes and the APK digest. You supply the case, alias, ground truth and outcome. A record from a different APK is refused.
+3. Run the lab server with `--expose-reasons`; the import needs the server's score and reasons. Use `--crashed` if the app crashed, and `--mode local` to record the local diagnostic instead of the server scan.
+
 | Case | Device / configuration | Expected (what "met" means) |
 |---|---|---|
 | clean_pixel | stock, locked Pixel | Enrollment ALLOW (RKP chain). Verified scan VERIFIED_FRESH, or PARTIAL only for Play if Play is not configured. No REVIEW history findings. |

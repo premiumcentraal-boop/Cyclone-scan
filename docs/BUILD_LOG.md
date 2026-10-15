@@ -16,7 +16,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 19 beta validation | BLOCKED | 7b05048 → c48221b | PR #20; CI 38674872520 (green) | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
 | 28 review of 17–19 | CI_PASSED | 24b7a71 → ca9d6e7 | PR #21; CI 38759654224 | UNVERIFIED | Sprint "beta readiness without hardware"; 6 findings, 5 addressed |
 | 29 privacy and retention | CI_PASSED | f98ec72 → 305837f | PR #22; CI 38761296858 | not needed | Retention sweep, erasure, data inventory |
-| 30 phone-test readiness | PLANNED | Run 29 successor | Not created | Not executed | Scanner lab-record export + validator |
+| 30 phone-test readiness | CI_PASSED | df19d6d → dfed65a | PR #23; CI 38763660979 | not executed | Scanner lab record + import tool |
 
 ### Run 14 — Report coverage and result accuracy
 - State: CI_PASSED (not DEVICE_VERIFIED; not merged)
@@ -194,3 +194,20 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Automated checks actually run: local Python 3.13 → 530 passed (515 + 15 new).
 - CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38761296858 — SUCCESS (all jobs incl. reference image).
 - Beta-gate approvals: `privacy_retention` stays UNVERIFIED until a human privacy review signs off.
+
+### Run 30 — Phone-test readiness
+- State: CI_PASSED (not merged; not device-tested)
+- Started/completed: 15 October 2026
+- Exact base SHA: df19d6d (`run-29-privacy-retention`, PR #22)
+- Branch / PR: `run-30-phone-test-readiness` → base `run-29-privacy-retention`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/23 (head dfed65a, code)
+- Changes delivered: see [RUN_30_PHONE_TEST_READINESS.md](RUN_30_PHONE_TEST_READINESS.md)
+- Automated checks actually run: local Python 3.13 → 543 passed (530 + 13 new); CI import step simulated locally. Android: CI only.
+- CI URL and outcome:
+  - https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38763078952 (f9f2094): FAILED, scanner Kotlin compile. The new CI annotation step showed it directly: `Unresolved reference 'SCANNER_VERSION'` in Scanner.kt. Fixed in dfed65a.
+  - https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38763660979 (dfed65a): SUCCESS (all jobs, incl. "Scanner lab record imports as a lab observation"). Scanner APK artifact 11987461178 (debug-key test build; not yet recorded as a candidate).
+- Physical device: none. The next candidate build must come from this branch or later to use the lab-record button.
+
+### Sprint result (15 October 2026)
+- Runs 28–30 are CI_PASSED as stacked draft PRs #21 → #22 → #23 on #20. Nothing is merged or published.
+- Beta gate: unchanged at NO_GO. This sprint produced inputs for `protocol_review`, `integrated_claude_runs` (RUN_28_REVIEW.md) and `privacy_retention` (PRIVACY.md), but those approvals need human sign-off. The 22 phone-dependent blockers now have a faster recording path (Run 30); they still need a phone.
+- Owner decisions still open: test phone access, Google Cloud/Play setup, signing identity, licence, threshold review, merge order of PRs #1–#23 into `main`.
