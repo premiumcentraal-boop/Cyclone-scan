@@ -83,6 +83,8 @@ class KeyRotationRequest(
     val newKeySignature: ByteArray,
     val newAttestationChain: List<ByteArray>,
     val newConfirmKeyChain: List<ByteArray>?,
+    /** Run 28: Play Integrity token for RequestHash.keyRotation(rotationData); null if not configured. */
+    val playIntegrityToken: String? = null,
 )
 
 /** Per-evidence verification status, exactly as the server reports it. */

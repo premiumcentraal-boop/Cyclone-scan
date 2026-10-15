@@ -92,6 +92,12 @@ class TrustPolicy:
     scan_require_play_integrity: bool = False
     # Scan-refresh snapshots kept per device; enrollment and rotation snapshots are kept.
     history_max_snapshots: int = 50
+    # Run 28: what a scan does when its fresh attestation contradicts the enrolled device
+    # (a REVIEW history finding: other attested model, boot key or lock state, or a patch
+    # that went backwards). "step_up" returns STEP_UP with SCAN_DEVICE_EVIDENCE_CHANGED;
+    # "report" only lists the finding (the Run 17 behaviour). Legitimate OS updates are
+    # INFO findings and never trigger it.
+    scan_history_review: str = "step_up"
 
     # Risk scoring (Phase 3) -------------------------------------------------
     risk: RiskPolicy = field(default_factory=RiskPolicy)
@@ -147,6 +153,8 @@ class TrustPolicy:
                 raise ValueError(f"{key} must be a positive integer")
         if not isinstance(self.policy_version, str) or not _VERSION_LABEL.match(self.policy_version):
             raise ValueError("policy_version must be at most 64 characters of [A-Za-z0-9._:-]")
+        if self.scan_history_review not in ("step_up", "report"):
+            raise ValueError("scan_history_review must be 'step_up' or 'report'")
         if self.unbound_enrollment_state not in ("active", "pending"):
             raise ValueError("unbound_enrollment_state must be 'active' or 'pending'")
         if type(self.pending_ttl_seconds) is not int or self.pending_ttl_seconds <= 0:

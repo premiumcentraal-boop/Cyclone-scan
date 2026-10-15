@@ -330,7 +330,18 @@ def test_patch_regression_is_reported_for_review(env):
     ch = device_challenge(env, phone.device_id).json()
     out = scan(env, scan_body(env, phone, challenge=ch,
                               kd=KD(challenge=b64url_decode(ch["nonce"]), os_patch_level=202601)))
-    assert out["decision"] == "ALLOW"   # a diagnostic, not a new block factor
+    # Run 28: by default a REVIEW finding steps the scan up (never a plain "trusted").
+    assert out["decision"] == "STEP_UP" and out["reasons"] == [R.SCAN_DEVICE_EVIDENCE_CHANGED]
+    assert {"code": "PATCH_REGRESSION", "level": "REVIEW", "field": "os_patch_level"} in out["history"]["changes"]
+
+
+def test_patch_regression_report_only_policy(policy):
+    env = Env(policy, scan_history_review="report")
+    phone = env.phone()
+    ch = device_challenge(env, phone.device_id).json()
+    out = scan(env, scan_body(env, phone, challenge=ch,
+                              kd=KD(challenge=b64url_decode(ch["nonce"]), os_patch_level=202601)))
+    assert out["decision"] == "ALLOW"   # the Run 17 behaviour: a diagnostic only
     assert {"code": "PATCH_REGRESSION", "level": "REVIEW", "field": "os_patch_level"} in out["history"]["changes"]
 
 

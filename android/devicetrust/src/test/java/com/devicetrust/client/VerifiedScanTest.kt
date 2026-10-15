@@ -126,6 +126,9 @@ class ScanEvidenceTest {
             KeyRotationRequest("dev", "ch", byteArrayOf(1), byteArrayOf(2), byteArrayOf(3), listOf(byteArrayOf(4)), null)))
         assertEquals(setOf("deviceId", "challengeId", "rotationData", "oldKeySignature", "newKeySignature",
             "newAttestationChain"), rotation.keySet())
+        val withPlay = JSONObject(TrustJson.encodeKeyRotation(
+            KeyRotationRequest("dev", "ch", byteArrayOf(1), byteArrayOf(2), byteArrayOf(3), listOf(byteArrayOf(4)), null, "tok")))
+        assertEquals("tok", withPlay.getString("playIntegrityToken"))
         val challengeBody = JSONObject(TrustJson.encodeDeviceChallengeRequest("dev", "scan"))
         assertEquals(setOf("deviceId", "purpose"), challengeBody.keySet())
         assertEquals("scan", challengeBody.getString("purpose"))
@@ -291,6 +294,22 @@ class VerifiedScanClientTest {
         val doc = JSONObject(String(sent.rotationData, Charsets.UTF_8))
         assertEquals("key-rotation", doc.getString("purpose"))
         assertTrue(verifies(attester, "a1", sent.rotationData, sent.newKeySignature))
+    }
+
+    @Test
+    fun rotationCarriesAPlayTokenBoundToTheRotationTranscript() = runTest {
+        val attester = Attester()
+        val api = Api()
+        var hash: String? = null
+        client(api, attester, enrolled(attester), integrity = { h -> hash = h; "tok" }).rotateKeys()
+        val sent = api.rotationRequest!!
+        assertEquals("tok", sent.playIntegrityToken)
+        assertEquals(RequestHash.keyRotation(sent.rotationData), hash)
+        // Without a configured Play source no token is sent (the server decides whether that blocks).
+        val api2 = Api()
+        val attester2 = Attester()
+        client(api2, attester2, enrolled(attester2)).rotateKeys()
+        assertEquals(null, api2.rotationRequest!!.playIntegrityToken)
     }
 
     @Test

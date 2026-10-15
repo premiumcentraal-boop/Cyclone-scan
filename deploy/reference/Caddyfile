@@ -5,6 +5,9 @@
 {
 	servers {
 		# Your backend's addresses: only they may supply the phone's IP in X-Forwarded-For.
+		# PLACEHOLDER: replace with your backend's exact source addresses. If it does not
+		# match, every phone is seen as your backend's address and the fleet network
+		# factors misfire (docs/DEPLOYMENT.md, "pass on the phone's IP address").
 		trusted_proxies static 10.0.0.0/8
 		client_ip_headers X-Forwarded-For
 	}

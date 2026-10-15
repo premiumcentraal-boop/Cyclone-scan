@@ -26,6 +26,7 @@ from datetime import datetime
 from . import reasons as R
 from . import scan_evidence
 from .evidence_history import (
+    SOURCE_KEY_ROTATION,
     SOURCE_SCAN_REFRESH,
     VERIFIER_RULESET,
     compare_continuity,
@@ -75,7 +76,7 @@ STEP_UP = "STEP_UP"
 BLOCK = "BLOCK"
 
 # Reasons that ask for stronger authentication instead of blocking outright.
-_STEP_UP_REASONS = frozenset({R.CONFIRM_KEY_REQUIRED, R.RISK_STEP_UP})
+_STEP_UP_REASONS = frozenset({R.CONFIRM_KEY_REQUIRED, R.RISK_STEP_UP, R.SCAN_DEVICE_EVIDENCE_CHANGED})
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,8 @@ class KeyRotationRequest:
     new_key_signature: bytes
     new_chain: list[bytes]
     new_confirm_chain: list[bytes] | None = None
+    # Run 28: Play Integrity token bound to the exact rotation transcript (key-rotation domain).
+    play_integrity_token: str | None = None
 
 
 @dataclass(frozen=True)
@@ -626,10 +629,29 @@ class DeviceTrustService:
             reasons.append(risk_reason)
 
         history = self._scan_history(record, fresh)
+        if self.policy.scan_history_review == "step_up" and any(c["level"] == "REVIEW" for c in history["changes"]):
+            # Run 28: fresh hardware evidence that contradicts the enrolled device is never
+            # presented as a plain "trusted" verdict.
+            reasons.append(R.SCAN_DEVICE_EVIDENCE_CHANGED)
         return finish(reasons, warnings, history, risk)
 
+    @staticmethod
+    def _enrolled_baseline(record) -> dict:
+        """The current key's own attested evidence, as a v1 snapshot-shaped dict.
+
+        Run 28: the decision baseline. The latest history row may itself be a refresh,
+        so comparing only with it would let one contradicting scan become the reference
+        for the next one.
+        """
+        ev = dict(record.evidence)
+        ids = {k: v for k, v in (ev.get("attested_ids") or {}).items()
+               if k in {"brand", "device", "product", "manufacturer", "model"}}
+        return {**ev, "v": 1, "attested_ids": ids,
+                "device_key_sha256": hashlib.sha256(record.public_key_spki).hexdigest()}
+
     def _scan_history(self, record, fresh: AttestationResult | None) -> dict:
-        """Persist a verified refresh snapshot (if any) and compare it with the latest one."""
+        """Persist a verified refresh snapshot (if any); compare it with the latest snapshot
+        and with the enrolled key's attested evidence (REVIEW findings from either count)."""
         rows = self._registry.assurance_history(record.device_id, 1)
         previous = rows[0] if rows else None
         out = {"snapshots": None, "previousAt": previous["at"] if previous else None,
@@ -641,6 +663,11 @@ class DeviceTrustService:
             if previous is not None:
                 out["changes"] = compare_continuity(previous["evidence"], current)
                 out["compared"] = True
+            seen = {(c["code"], c["field"]) for c in out["changes"]}
+            for change in compare_continuity(self._enrolled_baseline(record), current):
+                if change["level"] == "REVIEW" and (change["code"], change["field"]) not in seen:
+                    out["changes"].append(change)
+                    out["compared"] = True
             self._registry.record_snapshot(record.device_id, current, self.policy.history_max_snapshots)
         out["snapshots"] = len(self._registry.assurance_history(record.device_id, 100))
         return out
@@ -712,6 +739,21 @@ class DeviceTrustService:
             reasons.append(R.KEY_ROTATION_PROOF_INVALID)
         if att.evidence is not None and self._registry.key_known(att.evidence.leaf_spki_sha256):
             reasons.append(R.KEY_ALREADY_ENROLLED)
+        if att.evidence is not None and new_spki is not None:
+            # Run 28: rotation keeps one enrolled phone's identity. A new key whose attestation
+            # contradicts the enrolled evidence (other model, boot key, lock state, older
+            # patch) is not a same-phone rotation; recovery is an authenticated new enrollment.
+            candidate = snapshot(att.evidence, new_spki, source=SOURCE_KEY_ROTATION,
+                                 authorized_by_sha256=hashlib.sha256(record.public_key_spki).hexdigest())
+            if any(c["level"] == "REVIEW" for c in compare_continuity(self._enrolled_baseline(record), candidate)):
+                reasons.append(R.KEY_ROTATION_DEVICE_CHANGED)
+        # Run 28: the key that gets registered meets the same Play requirement as at enrollment.
+        play_signals = None
+        if new_spki is not None:
+            play_signals = self._check_play(
+                req.play_integrity_token,
+                scan_evidence.request_hash(scan_evidence.PURPOSE_KEY_ROTATION, req.rotation_data),
+                self.policy.require_play_integrity, reasons, warnings, now)
         confirm = None
         if req.new_confirm_chain:
             confirm = self._verifier.verify(req.new_confirm_chain, nonce, doc.device, now=now)
@@ -730,7 +772,7 @@ class DeviceTrustService:
                 keybox = self._registry.attestation_key_stats(
                     att.evidence.attestation_key_sha256, self.policy.risk.keybox_window_seconds)
             now_s = now.timestamp() if now else time.time()
-            risk = assess(RiskInput(None, None, new_evidence, device_age_seconds=now_s - record.enrolled_at,
+            risk = assess(RiskInput(None, play_signals, new_evidence, device_age_seconds=now_s - record.enrolled_at,
                                     reported_ids=doc.device, keybox=keybox),
                           self.policy.risk, self.policy.signing_cert_sha256, action_type=None, now=now)
             if (risk_reason := _risk_reason(risk)) is not None:

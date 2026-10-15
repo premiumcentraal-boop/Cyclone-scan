@@ -18,6 +18,11 @@ operators ──VPN/SSH──▶ 127.0.0.1:8081 trust-admin (admin API only) ─
   - Your backend authenticates the user, then forwards the app's requests with the gateway secret and the account principal (Run 16).
   - It executes only what the service returns for signed actions.
   - Exactly-once execution of a payment is your backend's job; a one-time signature does not deliver it.
+- **Your backend must pass on the phone's IP address.** The fleet signals (Run 12) group requests by a keyed hash of the client's network block. In this topology the service would otherwise see only your backend's (or Docker's) address, so every phone would share one "network" and the burst and many-devices factors would fire for normal traffic once it exceeds their thresholds (10 enrollments or 20 devices per hour by default).
+  - Set `X-Forwarded-For: <phone IP>` on each request your backend forwards.
+  - In the `Caddyfile`, set `trusted_proxies` to your backend's **exact source addresses**. The `10.0.0.0/8` placeholder is not right for every network: Docker's published port often presents the Docker gateway (172.16.0.0/12) instead. Caddy then hands the service the first trusted `X-Forwarded-For` entry; from anyone else it uses the connection address.
+  - Check after setup: enroll from two networks and compare the `network` hashes in the admin fleet view (`GET /v1/admin/fleet`). One shared hash for all phones means the IP is not passed through.
+  - If your backend cannot pass the IP, set both `fleet_network_burst` and `fleet_network_many_devices` to 0 in `risk.weights` so the shared address cannot raise scores. (Run 28 review finding.)
 - **The admin API runs as a separate process** (`device-trust serve-admin`, Run 18) on an internal listener. The client process is started without an admin token, so `/v1/admin/*` does not exist there. The proxy also refuses those paths.
 - **TLS:** terminate TLS in front of the client API (Caddy in the reference). Use your own PKI, or `tls internal` with its CA trusted by the backend only. The service itself speaks plain HTTP on the internal network.
 

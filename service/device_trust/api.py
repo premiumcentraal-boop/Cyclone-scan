@@ -199,6 +199,8 @@ class KeyRotationBody(_Model):
     new_attestation_chain: list[str] = Field(alias="newAttestationChain", min_length=1, max_length=10)
     new_confirm_key_chain: list[str] | None = Field(default=None, alias="newConfirmKeyChain",
                                                     min_length=1, max_length=10)
+    # Run 28: requestHash = base64url(SHA-256("device-trust/key-rotation/v1" || rotationData)).
+    play_integrity_token: str | None = Field(default=None, alias="playIntegrityToken", max_length=MAX_TOKEN_CHARS)
 
 
 class KeyRotationResponse(_Model):
@@ -440,6 +442,7 @@ def create_app(
                     new_key_signature=_b64(body.new_key_signature, "newKeySignature"),
                     new_chain=_decode_chain(body.new_attestation_chain),
                     new_confirm_chain=_decode_chain(body.new_confirm_key_chain) if body.new_confirm_key_chain else None,
+                    play_integrity_token=body.play_integrity_token,
                 ),
                 principal=who,
             )

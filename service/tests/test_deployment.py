@@ -38,6 +38,7 @@ def test_reference_policy_is_the_recommended_beta_configuration():
     policy = TrustPolicy.from_file(REFERENCE)
     assert policy.require_principal and policy.require_bound_enrollment and policy.require_bound_device
     assert policy.scan_require_fresh_attestation and policy.policy_version == "beta-1"
+    assert policy.scan_history_review == "step_up"   # Run 28
     result = check(str(REFERENCE))
     # Shipped with a placeholder signer on purpose: it must not pass until the operator sets it.
     assert not result["ok"] and "signing_cert_sha256" in result["failed"]
