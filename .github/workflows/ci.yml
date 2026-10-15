@@ -85,12 +85,12 @@ jobs:
           KEYSTORE_B64: ${{ secrets.CYCLONE_RELEASE_KEYSTORE_B64 }}
         run: |
           # Run 18: the approved signing identity comes only from repository secrets.
-          # Without them the scanner is a TEST_DEBUG_KEY build (recorded in build-evidence.json).
+          # Without them the scanner is signed with the public dev key (DEV_KEY in build-evidence.json).
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
             echo "CYCLONE_RELEASE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           else
-            echo "No release signing secrets configured: building a debug-key test candidate"
+            echo "No release signing secrets configured: signing with the PUBLIC development key (DEV_KEY)"
           fi
       - name: Test, lint and assemble
         env:

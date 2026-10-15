@@ -4,7 +4,7 @@ plugins {
 }
 
 // Must match the SDK version published by ../devicetrust (android/gradle.properties).
-val sdkVersion = "0.9.0-beta.1"
+val sdkVersion = "0.9.0-dev.1"
 
 android {
     namespace = "com.example.devicetrustsample"

@@ -211,3 +211,20 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Runs 28–30 are CI_PASSED as stacked draft PRs #21 → #22 → #23 on #20. Nothing is merged or published.
 - Beta gate: unchanged at NO_GO. This sprint produced inputs for `protocol_review`, `integrated_claude_runs` (RUN_28_REVIEW.md) and `privacy_retention` (PRIVACY.md), but those approvals need human sign-off. The 22 phone-dependent blockers now have a faster recording path (Run 30); they still need a phone.
 - Owner decisions still open: test phone access, Google Cloud/Play setup, signing identity, licence, threshold review, merge order of PRs #1–#23 into `main`.
+
+### Run 19b — Open-source development stage
+- State: IMPLEMENTED; CI pending. Not DEVICE_VERIFIED; not merged.
+- Owner instruction, 15 October 2026: "Make it open source for now and decide the best options for the rest, this is dev apk stage". Decisions and rationale: [RUN_19B_DEV_OPEN_SOURCE.md](RUN_19B_DEV_OPEN_SOURCE.md).
+- Base: aa1b0ce (`run-30-phone-test-readiness`, PR #23).
+  - First drafted on Run 19 (24b7a71), then rebuilt on the other session's Runs 28–30 once they were found.
+  - Its own retention implementation was dropped in favour of Run 29's. Run 28's rotation and scan fixes are kept unchanged.
+- Delivered:
+  - Apache-2.0 LICENSE and NOTICE, plus licence metadata in the POM and pyproject.
+  - Version 0.9.0-dev.1 (service 0.9.0.dev1).
+  - A committed public DEV signing key (cert SHA-256 412b9e05c1418d4e5e1e0f86ee21687569b4623231f951e5cf6a8e67cc469416): `DEV_KEY` classification, and the beta config check refuses it.
+  - Tag-triggered GitHub pre-releases (`.github/workflows/dev-release.yml`).
+- Local checks:
+  - Python 547 passed.
+  - The full Gradle CI command passed.
+  - The scanner release APK verified by apksigner as `DEV_KEY`.
+- Repository secrets cannot be read or set from the agent environment (the proxy blocks the Actions secrets API); no production key exists.

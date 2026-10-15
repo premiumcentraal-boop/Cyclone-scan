@@ -61,7 +61,7 @@ def test_check_signing_cli(tmp_path, capsys):
 def test_toolchain_matches_the_build_files():
     tc = build_evidence.toolchain(ROOT / "android")
     assert tc["ndk"] == "27.2.12479018" and tc["cmake"] == "3.22.1" and tc["compile_sdk"] == "35"
-    assert tc["version"] == "0.9.0-beta.1" and tc["version_code"] == "6"
+    assert tc["version"] == "0.9.0-dev.1" and tc["version_code"] == "6"
     assert tc["gradle"] and tc["android_gradle_plugin"] and tc["kotlin"]
 
 

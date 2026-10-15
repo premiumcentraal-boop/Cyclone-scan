@@ -16,10 +16,12 @@ android {
         versionName = providers.gradleProperty("cyclone.version").get()
     }
 
-    // Run 18: the approved signing identity comes only from the secret store (CI secrets
-    // or the release operator's environment). This build never generates a key. Without
-    // all four values the release APK is a test build signed with the local debug key;
-    // -Pcyclone.requireReleaseSigning=true turns that into a build failure.
+    // Signing (Runs 18/19b). Release builds use, in order:
+    // 1. the approved identity from the secret store: CYCLONE_RELEASE_STORE_FILE / _STORE_PASSWORD /
+    //    _KEY_ALIAS / _KEY_PASSWORD (CI secrets or the release operator's environment);
+    // 2. otherwise the PUBLIC development key in android/signing (stable across machines, so dev
+    //    installs update in place; never trusted by a production policy).
+    // This build never generates a key. -Pcyclone.requireReleaseSigning=true fails without (1).
     val releaseStore = System.getenv("CYCLONE_RELEASE_STORE_FILE")?.takeIf { it.isNotBlank() }
     val releaseSigning = releaseStore != null && listOf(
         "CYCLONE_RELEASE_STORE_PASSWORD", "CYCLONE_RELEASE_KEY_ALIAS", "CYCLONE_RELEASE_KEY_PASSWORD",
@@ -36,6 +38,12 @@ android {
                 keyPassword = System.getenv("CYCLONE_RELEASE_KEY_PASSWORD")
             }
         }
+        create("dev") {
+            storeFile = rootProject.file("signing/cyclone-dev.jks")
+            storePassword = "cyclone-dev"
+            keyAlias = "cyclone-dev"
+            keyPassword = "cyclone-dev"
+        }
     }
 
     buildTypes {
@@ -43,7 +51,7 @@ android {
             // Optimised and NOT debuggable (a debuggable app would flag itself).
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName(if (releaseSigning) "release" else "debug")
+            signingConfig = signingConfigs.getByName(if (releaseSigning) "release" else "dev")
         }
     }
 

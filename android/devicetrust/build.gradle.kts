@@ -39,8 +39,8 @@ android {
     }
 }
 
-// Run 18: the consumable AAR. Published to a local file repository only; where it is
-// distributed from (and under which licence) is an owner decision, see docs/DEPENDENCY_LICENSES.md.
+// Run 18: the consumable AAR, published to a local file repository and attached to dev
+// pre-releases (Run 19b). Apache-2.0; dependencies: docs/DEPENDENCY_LICENSES.md.
 publishing {
     publications {
         register<MavenPublication>("release") {
@@ -50,6 +50,14 @@ publishing {
             pom {
                 name.set("Cyclone Scan Device Trust SDK")
                 description.set("Collects hardware-attested device evidence for a customer-operated verification service.")
+                url.set("https://github.com/premiumcentraal-boop/Cyclone-scan")
+                licenses {
+                    license {
+                        name.set("Apache-2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                    }
+                }
+                scm { url.set("https://github.com/premiumcentraal-boop/Cyclone-scan") }
             }
         }
     }
