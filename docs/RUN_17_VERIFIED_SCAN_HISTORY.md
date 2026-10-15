@@ -202,3 +202,46 @@ Neither path proves the old and new keys are physically on one phone. Rotation p
   - label function including expiry
   - rotation saves the new aliases only on ALLOW
 - **CI:** a Kotlin-generated scan transcript passes the server's strict scan parser (`tools/check_scan_fixtures.py`).
+
+## Delivered
+
+- **Service:**
+  - `scan_evidence.py`: strict transcripts, domains and builders.
+  - `service.py`:
+    - `issue_device_challenge`, `verify_scan` and `rotate_key`
+    - a shared lifecycle gate
+    - owner and admin history views
+  - `registry.py`:
+    - migration 3
+    - `retired_keys`, `key_known`, `record_snapshot` with retention
+    - a compare-and-swap `rotate_key`
+    - explicit-column snapshot inserts
+  - `evidence_history.py`: snapshot sources, `compare_continuity` and `summary`.
+  - `policy.py`: the Run 17 keys and a secret-free `digest()`.
+  - `api.py`:
+    - `/v1/device-challenges`, `/v1/scans/verify`, `/v1/key-rotations`
+    - `/v1/devices/{id}/history` (gateway mode)
+  - Seven new reason codes.
+- **SDK:**
+  - `ScanEvidence.kt`: transcripts and result models, including `ServerScan`, its labels and `UnavailableReason`.
+  - `TrustJson`: strict parsing; a malformed response is never `Verified`.
+  - `HttpTrustApi` routes.
+  - `DeviceTrustClient.verifiedScan()`: ephemeral key deleted in `finally`; every remote failure maps to `Unavailable`.
+  - `DeviceTrustClient.rotateKeys()`: switches aliases only when the server reports `rotated`.
+  - New `TrustApi` methods have default bodies, so existing custom transports still compile.
+- **Scanner 0.8.0 (versionCode 5):**
+  - Server tab: verified-scan card with per-evidence rows, policy traceability and freshness, plain-language history findings.
+  - Optional Cloud project number for Play Integrity; a key rotation button.
+  - Wording rules live in the pure `ServerScanView` and are unit-tested.
+- **CI:** a new step, `tools/check_scan_fixtures.py`, parses Kotlin-generated maximum-size scan and rotation transcripts with the server's strict parser.
+
+Scope boundaries kept:
+- Native code (`android/devicetrust/src/main/cpp`) is untouched; it is the Run 27 native-review area.
+- No Run 20–26 file was rewritten. `evidence_history.compare` and `snapshot` were extended additively, and `compare` itself is unchanged.
+- Pending expiry still runs only on the completion path; there is no background scheduler.
+
+Known limitations:
+- If a rotation response is lost after the server rotated, the app still holds the old (retired) key and must enroll again.
+- Scan risk uses the enrollment thresholds (`action_type=None`).
+- The fresh chain proves the current state of *some* hardware that ran the app's attestation for this nonce. Code with use of the enrolled key could attach another phone's chain.
+- Live Google decoding and physical devices are untested; that is Run 19.

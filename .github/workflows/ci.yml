@@ -104,6 +104,12 @@ jobs:
           PYTHONPATH=service python3 tools/check_enrollment_fixtures.py
           android/devicetrust/build/enrollment-transcript-detected.json
           android/devicetrust/build/enrollment-transcript-unavailable.json
+      - name: Kotlin scan and key-rotation transcripts pass the server parser
+        working-directory: .
+        run: >-
+          PYTHONPATH=service python3 tools/check_scan_fixtures.py
+          android/devicetrust/build/scan-transcript-detected.json
+          android/devicetrust/build/key-rotation-transcript.json
       - name: Verify native ABI packaging and owned code bounds
         working-directory: .
         run: python3 tools/check_native_apk.py

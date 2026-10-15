@@ -44,11 +44,15 @@ app                                   service
  │ POST /v1/challenges ─────────────▶ │  {challengeId, nonce(b64url), expiresAt}
  │ generate EC key in AndroidKeyStore │
  │   with attestationChallenge=nonce  │
+ │ evidenceData = signed transcript   │  (Run 20; see docs/assurance/RUN_20_PROTOCOL.md)
+ │ evidenceSignature = ECDSA(device key, evidenceData)
  │ requestHash = b64url(SHA-256(      │
- │   "device-trust/enroll/v1" ‖ nonce ‖ attested-key SPKI DER))
+ │   "device-trust/enroll-evidence/v1" ‖ evidenceData))
+ │   (legacy unbound enrollment only: "device-trust/enroll/v1" ‖ nonce ‖ SPKI)
  │ Play Integrity token(requestHash)  │
  │ POST /v1/enrollments ────────────▶ │  {challengeId, attestationChain[b64 DER, leaf first],
- │                                    │   playIntegrityToken?, device{brand,device,product,manufacturer,model}}
+ │                                    │   evidenceData, evidenceSignature, playIntegrityToken?,
+ │                                    │   device{brand,device,product,manufacturer,model}, signals?}
  │ ◀──────────────────────────────────│  {decision: ALLOW|BLOCK, decisionId, deviceId?}
 ```
 
@@ -70,8 +74,9 @@ attests that the key:
 * accepts only a strong biometric (`userAuthType` = biometric; PIN/pattern
   only if `confirm_key_allow_device_credential`),
 * needs a fresh authentication for every signature (`authTimeout` absent or 0),
-* lives in the same hardware as the device key (same verified-boot key and
-  attested IDs) and is a different key.
+* reports the same verified-boot key and attested IDs as the device key, and
+  is a different key. This is a consistency check only: same-model phones share
+  these facts, so it does **not** prove both keys are on one physical phone.
 
 A bad confirm chain blocks the whole enrollment (`CONFIRM_KEY_INVALID`,
 `CONFIRM_KEY_NOT_USER_AUTH_BOUND`); devices without strong biometrics simply
@@ -112,6 +117,40 @@ Policy keys: `allowed_action_types`, `confirm_key_required_actions`,
 `play_integrity_required_actions`, `action_challenge_ttl_seconds`,
 `action_max_age_seconds`, `confirm_key_allow_device_credential`
 (see `policy.example.json`).
+
+## Run 17: server-verified scan, key rotation and history
+
+Full protocol, threat assumptions and tests: [RUN_17_VERIFIED_SCAN_HISTORY.md](../docs/RUN_17_VERIFIED_SCAN_HISTORY.md).
+
+```
+app                                   trust service
+ │ POST /v1/device-challenges {deviceId, purpose:"scan"} ─▶ {challengeId, nonce, expiresAt}
+ │ ephemeral key with attestationChallenge = nonce (deleted afterwards)
+ │ scanData = {"v":1,"purpose":"scan","deviceId","challengeId","nonce","ts",
+ │             "freshChainSha256":[...]|null,"device":{...},"signals":{...}|null}
+ │ signature = ECDSA(enrolled device key, scanData)
+ │ playIntegrityToken? with requestHash = b64url(SHA-256("device-trust/scan-evidence/v1" ‖ scanData))
+ │ POST /v1/scans/verify {deviceId, challengeId, scanData, signature, freshAttestationChain?, playIntegrityToken?}
+ │ ◀── {decision, decisionId, verifiedAt, freshUntil, policy{version,digest,verifierRuleset},
+ │      evidence{deviceKeySignature,freshAttestation,playIntegrity,clientSignals}, coverage, history}
+```
+
+- The transcript is authenticated before any attestation or Play work.
+- The fresh chain is verified with every enrollment hard gate. Enrolled or retired keys are never accepted as fresh, and scans do not add to keybox history.
+- A verified fresh chain is stored as a minimal `scan_refresh` snapshot and compared with the previous one: patch, boot and attested-identity changes.
+- A scan never changes the device's lifecycle state and never authorises a transaction.
+
+**Key rotation:**
+- `POST /v1/device-challenges {purpose:"key-rotation"}` issues a challenge.
+- `POST /v1/key-rotations` then carries a transcript (domain `device-trust/key-rotation/v1`), signed by the current key and by the new key, plus the new attestation chain(s).
+- Only ALLOW rotates, atomically. The device ID and history are kept, and the old key is retired forever.
+- If the old key is lost, enroll again: that creates a new device record. Neither path proves the keys share one phone.
+
+**Owner and admin views:**
+- `GET /v1/devices/{id}/history` (gateway mode) returns attested history summaries and findings. It holds no evidence JSON or reasons.
+- The admin device view includes the same history.
+
+Policy keys: `policy_version`, `scan_challenge_ttl_seconds`, `scan_max_age_seconds`, `scan_result_ttl_seconds`, `scan_require_fresh_attestation` (default true), `scan_require_play_integrity`, `history_max_snapshots`.
 
 ## Phase 3: client signals and risk scoring
 

@@ -13,6 +13,14 @@ object RequestHash {
     fun enrollmentEvidence(data: ByteArray): String = hash(EVIDENCE_DOMAIN, data)
 
     private val ACTION_DOMAIN = "device-trust/action/v1".toByteArray(Charsets.US_ASCII)
+    private val SCAN_DOMAIN = "device-trust/scan-evidence/v1".toByteArray(Charsets.US_ASCII)
+    private val ROTATION_DOMAIN = "device-trust/key-rotation/v1".toByteArray(Charsets.US_ASCII)
+
+    /** Run 17: base64url(SHA-256("device-trust/scan-evidence/v1" || scan transcript)). Matches `scan_evidence.request_hash`. */
+    fun scanEvidence(data: ByteArray): String = hash(SCAN_DOMAIN, data)
+
+    /** Run 17: base64url(SHA-256("device-trust/key-rotation/v1" || rotation transcript)). */
+    fun keyRotation(data: ByteArray): String = hash(ROTATION_DOMAIN, data)
 
     /** base64url(SHA-256("device-trust/enroll/v1" || nonce || attested key SPKI DER)), unpadded. */
     fun enrollment(nonce: ByteArray, publicKeySpki: ByteArray): String = hash(ENROLL_DOMAIN, nonce, publicKeySpki)

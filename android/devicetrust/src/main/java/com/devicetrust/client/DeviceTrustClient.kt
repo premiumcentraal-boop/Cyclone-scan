@@ -4,6 +4,7 @@ import android.content.Context
 import com.devicetrust.client.signals.AndroidSignalProbe
 import com.devicetrust.client.signals.DeviceSignals
 import com.devicetrust.client.signals.SignalCollector
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -58,6 +59,13 @@ class SharedPreferencesEnrollmentStore(context: Context) : EnrollmentStore {
  * device-bound challenge and sign the action with the device key, or with the
  * confirm key after BiometricPrompt. Send the [SignedAction] to your backend
  * with the request; the backend verifies it with the trust service.
+ *
+ * **Server-verified scan** ([verifiedScan], Run 17): the enrolled key signs a scan
+ * transcript that carries fresh attestation from a short-lived key generated for the
+ * server's nonce; the server returns a traceable verdict and history comparison.
+ *
+ * **Key rotation** ([rotateKeys], Run 17): the enrolled key authorises new keys; if the
+ * enrolled key is lost, enroll again instead (a new device record).
  *
  * The app never decides trust locally.
  */
@@ -182,6 +190,110 @@ class DeviceTrustClient(
         }
         val token = integrity?.token(RequestHash.action(signedData))
         return SignedAction(enrollment.deviceId, challenge.challengeId, signedData, signature, keyKind, token)
+    }
+
+    /**
+     * Run 17: ask the server to verify the phone now.
+     *
+     * Never throws for remote problems and never reports a local result as server-verified:
+     * every failure becomes [ServerScan.Unavailable]. Use [ServerScan.label] to present it.
+     *
+     * @param freshAttestation generate a short-lived attested key for the scan nonce (deleted
+     *   afterwards). Without it the server reports freshAttestation NOT_PROVIDED, and the
+     *   default server policy rejects the scan.
+     */
+    suspend fun verifiedScan(freshAttestation: Boolean = true): ServerScan {
+        val enrollment = store.load() ?: return ServerScan.Unavailable(UnavailableReason.NOT_ENROLLED)
+        val ephemeral = newAlias()
+        return try {
+            val challenge = api.createDeviceChallenge(enrollment.deviceId, ScanEvidence.PURPOSE_SCAN)
+            val fresh = if (freshAttestation) {
+                // A device that cannot make one more key still gets a (partial) server verdict.
+                withContext(Dispatchers.Default) { runCatching { attester.generate(ephemeral, challenge.nonce) }.getOrNull() }
+            } else {
+                null
+            }
+            val report = collectSignals()?.let { JSONObject(it.toString()) }
+            val data = ScanEvidence.scan(enrollment.deviceId, challenge, clockMillis(), fresh?.chain, deviceInfo(), report)
+            val signature = try {
+                withContext(Dispatchers.Default) { attester.signer(enrollment.keyAlias).run { update(data); sign() } }
+            } catch (e: NotEnrolledException) {
+                // The enrolled key is gone from this keystore (reset, restored backup): enroll again.
+                return ServerScan.Unavailable(UnavailableReason.KEY_UNAVAILABLE)
+            }
+            val token = integrity?.let { source -> playToken(source, RequestHash.scanEvidence(data)) }
+            api.verifyScan(ScanRequest(enrollment.deviceId, challenge.challengeId, data, signature, fresh?.chain, token))
+                .copy(playRequested = integrity != null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: NotEnrolledException) {
+            // 404 from the server: unknown, not owned, pending, revoked or quarantined.
+            ServerScan.Unavailable(UnavailableReason.DEVICE_NOT_ACTIVE)
+        } catch (e: MalformedResponseException) {
+            ServerScan.Unavailable(UnavailableReason.MALFORMED_RESPONSE, e.message)
+        } catch (e: HttpStatusException) {
+            ServerScan.Unavailable(UnavailableReason.SERVER_ERROR, "HTTP ${e.code}")
+        } catch (e: UnsupportedOperationException) {
+            ServerScan.Unavailable(UnavailableReason.UNSUPPORTED_TRANSPORT, e.message)
+        } catch (e: DeviceTrustException) {
+            ServerScan.Unavailable(UnavailableReason.NETWORK, e.message)
+        } finally {
+            attester.delete(ephemeral)
+        }
+    }
+
+    private suspend fun playToken(source: IntegrityTokenSource, hash: String): String? = try {
+        source.token(hash)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null // the server reports Play as NOT_PROVIDED; the label shows the gap
+    }
+
+    /**
+     * Run 17: replace the enrolled keys with new ones the current device key authorises.
+     *
+     * Only when the server answers `rotated` does the client switch to the new keys and
+     * delete the old ones; any other outcome deletes the new keys and keeps the old ones.
+     * If the response is lost after the server rotated, the old key no longer verifies:
+     * enroll again. This is not proof that old and new keys share one physical phone.
+     *
+     * @throws NotEnrolledException if not enrolled or the server does not know the device as active.
+     */
+    suspend fun rotateKeys(withConfirmKey: Boolean = true): KeyRotationResult {
+        val enrollment = store.load() ?: throw NotEnrolledException()
+        val challenge = api.createDeviceChallenge(enrollment.deviceId, ScanEvidence.PURPOSE_KEY_ROTATION)
+        val alias = newAlias()
+        val confirmAlias = newAlias()
+        var keep = false
+        try {
+            val key = withContext(Dispatchers.Default) { attester.generate(alias, challenge.nonce) }
+            val confirm = if (withConfirmKey) {
+                withContext(Dispatchers.Default) { attester.generateConfirmKey(confirmAlias, challenge.nonce) }
+            } else {
+                null
+            }
+            val data = ScanEvidence.keyRotation(enrollment.deviceId, challenge, clockMillis(), key.chain, confirm?.chain, deviceInfo())
+            val (oldSignature, newSignature) = withContext(Dispatchers.Default) {
+                attester.signer(enrollment.keyAlias).run { update(data); sign() } to
+                    attester.signer(alias).run { update(data); sign() }
+            }
+            val result = api.rotateKey(
+                KeyRotationRequest(enrollment.deviceId, challenge.challengeId, data, oldSignature, newSignature, key.chain, confirm?.chain),
+            )
+            if (result.rotated) {
+                store.save(Enrollment(enrollment.deviceId, alias, confirm?.alias))
+                keep = true
+                attester.delete(enrollment.keyAlias)
+                enrollment.confirmKeyAlias?.let { attester.delete(it) }
+            }
+            return result
+        } finally {
+            if (!keep) {
+                attester.delete(alias)
+                attester.delete(confirmAlias)
+            }
+        }
     }
 
     /** Forget the local enrollment and delete its keys (e.g. on logout or after revocation). */

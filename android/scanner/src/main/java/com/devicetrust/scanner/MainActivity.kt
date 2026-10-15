@@ -73,7 +73,13 @@ class MainActivity : FragmentActivity() {
                     1 -> BiometricScreen(vm.biometricRunning, vm.biometricChecks) { vm.runBiometric(this@MainActivity) }
                     else -> ServerScreen(
                         vm.serverUrl, vm::updateServerUrl, vm.serverRunning, vm.serverSteps, vm.serverError,
-                    ) { vm.runServer(this@MainActivity) }
+                        onRun = { vm.runServer(this@MainActivity) },
+                        cloudProject = vm.cloudProject,
+                        onCloudProject = vm::updateCloudProject,
+                        serverScan = vm.serverScan,
+                        onVerifiedScan = { vm.runVerifiedScan(this@MainActivity) },
+                        onRotateKeys = { vm.runKeyRotation(this@MainActivity) },
+                    )
                 }
             }
         }

@@ -22,6 +22,22 @@ interface TrustApi {
      * the backend must execute only the action the trust service returns.
      */
     suspend fun verifyAction(action: SignedAction): ActionResult
+
+    /**
+     * Run 17: single-use challenge for a server-verified scan or a key rotation
+     * ([ScanEvidence.PURPOSE_SCAN] / [ScanEvidence.PURPOSE_KEY_ROTATION]).
+     * @throws NotEnrolledException when the server does not know the device as active.
+     */
+    suspend fun createDeviceChallenge(deviceId: String, purpose: String): Challenge =
+        throw UnsupportedOperationException("this transport does not support Run 17 device challenges")
+
+    /** Run 17: the server's verdict on one signed scan. */
+    suspend fun verifyScan(request: ScanRequest): ServerScan.Verified =
+        throw UnsupportedOperationException("this transport does not support server-verified scans")
+
+    /** Run 17: ask the server to replace the enrolled key with one the old key authorised. */
+    suspend fun rotateKey(request: KeyRotationRequest): KeyRotationResult =
+        throw UnsupportedOperationException("this transport does not support key rotation")
 }
 
 /** Wire format shared with `device_trust/api.py`. */
@@ -122,6 +138,95 @@ object TrustJson {
         return ServerDiagnostics(strings("reasons"), strings("warnings"), risk?.getInt("score"), factors)
     }
 
+    fun encodeDeviceChallengeRequest(deviceId: String, purpose: String): String =
+        JSONObject().put("deviceId", deviceId).put("purpose", purpose).toString()
+
+    fun encodeScan(request: ScanRequest): String = JSONObject().apply {
+        put("deviceId", request.deviceId)
+        put("challengeId", request.challengeId)
+        put("scanData", b64.encodeToString(request.scanData))
+        put("signature", b64.encodeToString(request.signature))
+        request.freshAttestationChain?.let { chain ->
+            put("freshAttestationChain", JSONArray(chain.map { b64.encodeToString(it) }))
+        }
+        request.playIntegrityToken?.let { put("playIntegrityToken", it) }
+    }.toString()
+
+    fun encodeKeyRotation(request: KeyRotationRequest): String = JSONObject().apply {
+        put("deviceId", request.deviceId)
+        put("challengeId", request.challengeId)
+        put("rotationData", b64.encodeToString(request.rotationData))
+        put("oldKeySignature", b64.encodeToString(request.oldKeySignature))
+        put("newKeySignature", b64.encodeToString(request.newKeySignature))
+        put("newAttestationChain", JSONArray(request.newAttestationChain.map { b64.encodeToString(it) }))
+        request.newConfirmKeyChain?.let { chain ->
+            put("newConfirmKeyChain", JSONArray(chain.map { b64.encodeToString(it) }))
+        }
+    }.toString()
+
+    private fun decision(raw: String) = when (raw) {
+        "ALLOW" -> Decision.ALLOW
+        "STEP_UP" -> Decision.STEP_UP
+        "BLOCK" -> Decision.BLOCK
+        else -> throw MalformedResponseException("unknown decision '$raw'")
+    }
+
+    /** Strict: a response without every documented field is malformed, never "verified". */
+    fun parseScan(body: String): ServerScan.Verified = try {
+        val json = JSONObject(body)
+        val evidence = json.getJSONObject("evidence")
+        fun status(key: String) = try {
+            EvidenceStatus.valueOf(evidence.getString(key))
+        } catch (e: IllegalArgumentException) {
+            throw MalformedResponseException("unknown $key status", e)
+        }
+        val policy = json.getJSONObject("policy")
+        val history = json.optJSONObject("history")?.let { h ->
+            val changes = h.getJSONArray("changes")
+            ScanHistory(
+                snapshots = h.getInt("snapshots"),
+                previousAtEpochSeconds = if (h.isNull("previousAt")) null else h.optDouble("previousAt"),
+                previousSource = if (h.isNull("previousSource")) null else h.optString("previousSource"),
+                compared = h.getBoolean("compared"),
+                changes = (0 until changes.length()).map { i ->
+                    changes.getJSONObject(i).let { HistoryChange(it.getString("code"), it.getString("level"), it.getString("field")) }
+                },
+            )
+        }
+        val coverage = json.optJSONObject("coverage")?.let { c -> c.keys().asSequence().associateWith { c.getInt(it) } }
+        val verifiedAt = json.getLong("verifiedAt")
+        val freshUntil = json.getLong("freshUntil")
+        if (freshUntil < verifiedAt) throw MalformedResponseException("freshUntil precedes verifiedAt")
+        ServerScan.Verified(
+            decision = decision(json.getString("decision")),
+            decisionId = json.getString("decisionId"),
+            verifiedAtMillis = verifiedAt,
+            freshUntilMillis = freshUntil,
+            policy = ScanPolicy(policy.getString("version"), policy.getString("digest"), policy.getString("verifierRuleset")),
+            evidence = ScanEvidenceStatus(
+                status("deviceKeySignature"), status("freshAttestation"), status("playIntegrity"), status("clientSignals"),
+            ),
+            coverage = coverage,
+            history = history,
+            diagnostics = parseDiagnostics(json),
+        )
+    } catch (e: org.json.JSONException) {
+        throw MalformedResponseException("scan response is not the documented shape", e)
+    }
+
+    fun parseKeyRotation(body: String): KeyRotationResult = try {
+        val json = JSONObject(body)
+        KeyRotationResult(
+            decision = decision(json.getString("decision")),
+            decisionId = json.getString("decisionId"),
+            rotated = json.getBoolean("rotated"),
+            hasConfirmKey = if (json.has("hasConfirmKey")) json.getBoolean("hasConfirmKey") else null,
+            diagnostics = parseDiagnostics(json),
+        )
+    } catch (e: org.json.JSONException) {
+        throw MalformedResponseException("key rotation response is not the documented shape", e)
+    }
+
     fun parseEnrollment(body: String): EnrollmentResult {
         val json = JSONObject(body)
         val decision = when (val raw = json.getString("decision")) {
@@ -172,6 +277,20 @@ class HttpTrustApi(
 
     override suspend fun verifyAction(action: SignedAction): ActionResult =
         TrustJson.parseActionResult(post("/v1/actions/verify", TrustJson.encodeAction(action), expected = 200))
+
+    override suspend fun createDeviceChallenge(deviceId: String, purpose: String): Challenge = try {
+        TrustJson.parseChallenge(
+            post("/v1/device-challenges", TrustJson.encodeDeviceChallengeRequest(deviceId, purpose), expected = 201),
+        )
+    } catch (e: HttpStatusException) {
+        if (e.code == 404) throw NotEnrolledException() else throw e
+    }
+
+    override suspend fun verifyScan(request: ScanRequest): ServerScan.Verified =
+        TrustJson.parseScan(post("/v1/scans/verify", TrustJson.encodeScan(request), expected = 200))
+
+    override suspend fun rotateKey(request: KeyRotationRequest): KeyRotationResult =
+        TrustJson.parseKeyRotation(post("/v1/key-rotations", TrustJson.encodeKeyRotation(request), expected = 200))
 
     private suspend fun post(path: String, body: String, expected: Int): String {
         val extraHeaders = headers()

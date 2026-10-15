@@ -44,6 +44,21 @@ device-trust serve --policy policy.json --host 0.0.0.0 --expose-reasons
 
 then enter `http://<computer-ip>:8080` in the app.
 
+**Server-verified scan** (Run 17, Server tab, after the server test has enrolled
+the phone): the server checks the phone now. It uses a fresh hardware
+attestation for a one-time challenge, signed by the enrolled key. The result
+shows:
+- the verdict, verification time and the time the result may be shown until
+- the policy label and digest
+- what was verified: signature, fresh attestation, Play Integrity, client checks
+- how this evidence compares with the previous verified evidence
+
+Results are labelled server-verified, partial (e.g. no Play verdict because no
+Cloud project number was entered), expired, rejected, or not server-verified.
+A failed or unreachable server is never shown as verified. The Scan tab is
+always a *local diagnostic*. "Rotate enrolled keys" replaces the enrolled keys
+with new ones the current key authorises.
+
 ## Notes
 
 * Local mode lets the phone judge itself, so a fully compromised phone could
@@ -69,3 +84,7 @@ debug key differs, so uninstall before installing a build from another machine.
 ## Run 13 (0.6.0)
 
 The Native versus Kotlin group shows nine native checks with per-check availability and comparable snapshot results. A maps or TracerPid disagreement is a signal only when Kotlin snapshots are stable and the native check completed. Unavailable reads never count as a mismatch. The local verdict is diagnostic: Play Integrity, fleet history and independent official-signer verification require the server/integration. Offline revocation and unallowlisted SELF_SIGNED boot are blocking local findings. Existing Google-root/chain compatibility limitations remain listed in the run notes.
+
+## Run 17 (0.8.0)
+
+The server-verified scan and key rotation described above. The local Scan tab is unchanged and still labelled as a local diagnostic. History findings describe changes in hardware-attested evidence. They are not proof of compromise: an OS update legitimately changes the boot image. They also do not prove the evidence came from "the same phone".
