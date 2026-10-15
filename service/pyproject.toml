@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "device-trust-service"
-version = "0.5.0"
-description = "Server-side Android device trust: key attestation + Play Integrity enrollment gates"
+version = "0.9.0b1"
+description = "Customer-operated Android device trust verification: key attestation, Play Integrity, signed actions and scans"
 requires-python = ">=3.11"
 dependencies = [
   "cryptography>=42",

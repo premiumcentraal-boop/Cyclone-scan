@@ -1,7 +1,11 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("maven-publish")
 }
+
+group = "com.devicetrust"
+version = providers.gradleProperty("cyclone.version").get()
 
 android {
     namespace = "com.devicetrust.client"
@@ -28,6 +32,32 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant("release") { withSourcesJar() }
+    }
+}
+
+// Run 18: the consumable AAR. Published to a local file repository only; where it is
+// distributed from (and under which licence) is an owner decision, see docs/DEPENDENCY_LICENSES.md.
+publishing {
+    publications {
+        register<MavenPublication>("release") {
+            groupId = "com.devicetrust"
+            artifactId = "devicetrust"
+            afterEvaluate { from(components["release"]) }
+            pom {
+                name.set("Cyclone Scan Device Trust SDK")
+                description.set("Collects hardware-attested device evidence for a customer-operated verification service.")
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "localBeta"
+            url = uri(layout.buildDirectory.dir("repo"))
+        }
     }
 }
 

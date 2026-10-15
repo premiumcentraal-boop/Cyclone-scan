@@ -80,7 +80,23 @@ jobs:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018 cmake;3.22.1"
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Release signing from secrets (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.CYCLONE_RELEASE_KEYSTORE_B64 }}
+        run: |
+          # Run 18: the approved signing identity comes only from repository secrets.
+          # Without them the scanner is a TEST_DEBUG_KEY build (recorded in build-evidence.json).
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "CYCLONE_RELEASE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "No release signing secrets configured: building a debug-key test candidate"
+          fi
       - name: Test, lint and assemble
+        env:
+          CYCLONE_RELEASE_STORE_PASSWORD: ${{ secrets.CYCLONE_RELEASE_STORE_PASSWORD }}
+          CYCLONE_RELEASE_KEY_ALIAS: ${{ secrets.CYCLONE_RELEASE_KEY_ALIAS }}
+          CYCLONE_RELEASE_KEY_PASSWORD: ${{ secrets.CYCLONE_RELEASE_KEY_PASSWORD }}
         run: |
           set -o pipefail
           ./gradlew --no-daemon --continue \
@@ -113,6 +129,26 @@ jobs:
       - name: Verify native ABI packaging and owned code bounds
         working-directory: .
         run: python3 tools/check_native_apk.py
+      - name: Publish the SDK AAR, rebuild it from scratch for comparison
+        run: |
+          set -o pipefail
+          cp devicetrust/build/outputs/aar/devicetrust-release.aar "$RUNNER_TEMP/aar-first.aar"
+          ./gradlew --no-daemon :devicetrust:bundleReleaseAar --rerun-tasks 2>&1 | tail -5
+          ./gradlew --no-daemon :devicetrust:publishReleasePublicationToLocalBetaRepository 2>&1 | tail -5
+      - name: Sample app builds against the published AAR only
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon -p sample-integration :app:assembleDebug 2>&1 | tail -5
+      - name: Build evidence (revision, digests, toolchain, signer, AAR reproducibility)
+        working-directory: .
+        run: >-
+          python3 -m tools.release.build_evidence --revision "$(git rev-parse HEAD)"
+          --aar "$RUNNER_TEMP/aar-first.aar"
+          --aar-rebuild android/devicetrust/build/outputs/aar/devicetrust-release.aar
+          --apk android/scanner/build/outputs/apk/release/scanner-release.apk
+          --sample-apk android/sample-integration/app/build/outputs/apk/debug/app-debug.apk
+          > android/scanner/build/outputs/apk/release/build-evidence.json
+          && cat android/scanner/build/outputs/apk/release/build-evidence.json
       - name: Record tested revision and APK digest
         working-directory: .
         run: >-
@@ -127,4 +163,61 @@ jobs:
           path: |
             android/scanner/build/outputs/apk/release/scanner-release.apk
             android/scanner/build/outputs/apk/release/scanner-assurance-manifest.json
+            android/scanner/build/outputs/apk/release/build-evidence.json
           if-no-files-found: error
+      - name: Upload SDK AAR (local Maven repository)
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-trust-sdk-maven-repo
+          path: android/devicetrust/build/repo
+          if-no-files-found: error
+
+  deploy:
+    name: Reference deployment image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the service image
+        run: docker build -t device-trust:ci service/
+      - name: Configuration check and smoke test (CI-only throwaway tokens, not a deployment)
+        run: |
+          set -euo pipefail
+          s=deploy/reference/secrets
+          mkdir -p "$s"
+          python3 - <<'PY'
+          import json
+          raw = json.load(open("deploy/reference/policy.beta.json"))
+          raw.update(signing_cert_sha256=["ab" * 32], package_name="com.ci.app", fleet_hash_key="ci-" + "k" * 29)
+          json.dump(raw, open("deploy/reference/secrets/policy.json", "w"))
+          PY
+          openssl rand -hex 32 > "$s/gateway_token"; openssl rand -hex 32 > "$s/admin_token"
+          chmod 0644 "$s"/*   # readable by the container user in this throwaway CI copy
+          # The shipped policy keeps a placeholder signer and must fail the beta check.
+          if docker run --rm -v "$PWD/deploy/reference:/cfg:ro" device-trust:ci check-config --policy /cfg/policy.beta.json; then
+            echo "placeholder policy unexpectedly passed"; exit 1
+          fi
+          docker run --rm -v "$PWD/$s:/run/secrets:ro" device-trust:ci check-config \
+            --policy /run/secrets/policy.json --gateway-token-file /run/secrets/gateway_token \
+            --admin-token-file /run/secrets/admin_token
+          docker compose -f deploy/reference/compose.yaml config --quiet
+          docker network create dt
+          docker run -d --name trust --network dt -v "$PWD/$s:/run/secrets:ro" -p 127.0.0.1:8080:8080 device-trust:ci
+          docker run -d --name admin --network dt -v "$PWD/$s:/run/secrets:ro" --volumes-from trust \
+            -p 127.0.0.1:8081:8081 device-trust:ci serve-admin --policy /run/secrets/policy.json \
+            --db /data/devices.sqlite --host 0.0.0.0 --port 8081 --admin-token-file /run/secrets/admin_token
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && curl -fsS http://127.0.0.1:8081/healthz && break; sleep 2; done
+          gw=$(cat "$s/gateway_token")
+          # Client API: gateway-authenticated, no admin routes. Admin API: no client routes.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/v1/challenges)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-Gateway-Authorization: Bearer $gw" \
+            -H 'X-Tenant-Id: ci' -H 'X-Account-Id: ci' http://127.0.0.1:8080/v1/challenges)" = 201
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/admin/fleet)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/v1/challenges)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(cat $s/admin_token)" \
+            http://127.0.0.1:8081/v1/admin/fleet)" = 200
+          echo "reference image smoke test passed"
+      - name: Container logs
+        if: always()
+        run: docker logs trust 2>&1 | tail -30; docker logs admin 2>&1 | tail -30 || true

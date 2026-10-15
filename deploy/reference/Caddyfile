@@ -1,0 +1,28 @@
+# TLS in front of the client API, for your backend only.
+# Replace the site address with the internal DNS name your backend uses. "tls internal"
+# issues a certificate from Caddy's own CA (trust it on the backend), or use your PKI;
+# mutual TLS between backend and proxy is recommended in addition to the gateway token.
+{
+	servers {
+		# Your backend's addresses: only they may supply the phone's IP in X-Forwarded-For.
+		trusted_proxies static 10.0.0.0/8
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+trust.internal.example:8443 {
+	tls internal
+
+	# Admin endpoints live only on the separate trust-admin listener.
+	@admin path /v1/admin/*
+	respond @admin 404
+
+	reverse_proxy trust:8080 {
+		# The service reads the first X-Forwarded-For entry (--trust-forwarded-for). Set it
+		# to the client IP Caddy derived above, so nobody else can forge it.
+		header_up X-Forwarded-For {client_ip}
+	}
+	request_body {
+		max_size 512KB
+	}
+}

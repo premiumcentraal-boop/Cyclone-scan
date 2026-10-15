@@ -179,9 +179,13 @@ class DeviceRecord:
 
 class DeviceRegistry:
     def __init__(self, path: str | Path = ":memory:", clock=time.time):
-        self._conn = sqlite3.connect(str(path), check_same_thread=False)
+        self._conn = sqlite3.connect(str(path), check_same_thread=False, timeout=10)
         self._lock = threading.Lock()
         self._clock = clock
+        if str(path) != ":memory:":
+            # Run 18: the client API and the separate admin process share one file;
+            # WAL lets the admin read while the client API writes.
+            self._conn.execute("PRAGMA journal_mode=WAL")
         with self._lock:
             self._migrate()
 

@@ -12,7 +12,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 15b integrate Runs 20–25 | CI_PASSED | 69e3bc5 + 2cd8d99 → 04996b5 | PR #15; CI 38650877770 | UNVERIFIED | Merge of the parallel stack; 390 Python tests |
 | 16 device lifecycle | CI_PASSED | 04996b5 → e042e7d | PR #17; CI 38652134596 | UNVERIFIED | 408 Python tests; states, ownership, migrations |
 | 17 server scan/history | CI_PASSED | 78f8c7b → 07039e1 | PR #18; CI 38667401633 | UNVERIFIED | 488 Python tests; scanner 0.8.0; live Google decode not exercised |
-| 18 beta packaging | PLANNED | Run 17 successor | Not created | Not executed | Stable signing setup dependency |
+| 18 beta packaging | IMPLEMENTED | 165d639 → (see Run 18 entry) | see Run 18 entry | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
 | 19 beta validation | PLANNED | Run 18 successor | Not created | Not executed | Normal-device matrix |
 
 ### Run 14 — Report coverage and result accuracy
@@ -116,3 +116,23 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
   - Native code is untouched; it is the Run 27 native-review area. No Run 27 PR existed at start.
   - Run 26 was not re-merged.
 - Next run and verified base: Run 18 (`run-18-beta-packaging`) from the Run 17 head.
+
+### Run 18 — Beta packaging and reference deployment
+- State: IMPLEMENTED; CI pending. Not DEVICE_VERIFIED; not merged; not published.
+- Started/completed: 15 October 2026
+- Exact base SHA: 165d63905cb73f6349cad1a13aa046b4f0dc38d6 (`run-17-verified-scan-history`, PR #18, CI green on 07039e1; later commits are log-only)
+- Branch / PR: `run-18-beta-packaging` → base `run-17-verified-scan-history` (stacked draft PR)
+- Changes delivered: see [RUN_18_BETA_PACKAGING.md](RUN_18_BETA_PACKAGING.md), [DEPLOYMENT.md](DEPLOYMENT.md), [DEPENDENCY_LICENSES.md](DEPENDENCY_LICENSES.md)
+- Automated checks actually run locally (agent container):
+  - Python: 502 passed (488 + 14 new across `test_deployment.py` and `test_release_tools.py`).
+  - The full Gradle CI command passed.
+  - The AAR was published, and the separate `sample-integration` build compiled against it by coordinates.
+  - The AAR is byte-identical after `--rerun-tasks` on this machine (sha256 9697bad8…).
+  - `build_evidence` and `check_signing` ran against the real APK: TEST_DEBUG_KEY, signer 64abdca3….
+  - Local process smoke test of `serve` + `serve-admin` on one database: 401 / 201 / 404 / 404 / 200 as the CI job asserts.
+  - Docker: client only, no daemon in the container. The image build and container smoke test are verified only by the new CI job.
+- CI URL and outcome: pending.
+- Physical device / live Google: none (UNVERIFIED).
+- Signing: no approved identity configured; candidates are TEST_DEBUG_KEY. No key was generated.
+- Open owner decisions: signing identity and secrets, project licence (Play Integrity dependency is proprietary), distribution channel, retention schedule.
+- Next run and verified base: Run 19 (device validation) from the Run 18 head.
