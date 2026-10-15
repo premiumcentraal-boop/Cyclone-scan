@@ -260,7 +260,7 @@ def _run22_db(path):
 
 def test_fresh_database_gets_current_schema(tmp_path):
     reg = DeviceRegistry(tmp_path / "fresh.sqlite")
-    assert reg.schema_version() == SCHEMA_VERSION == 3  # Run 17 added migration 3
+    assert reg.schema_version() == SCHEMA_VERSION == 4  # Run 17 added migration 3, Run 29 migration 4
 
 
 def test_phase1_database_is_adopted_and_upgraded(tmp_path):

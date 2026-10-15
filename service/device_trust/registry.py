@@ -143,9 +143,18 @@ def _migrate_3_continuity(conn: sqlite3.Connection) -> None:
     _add_columns(conn, "assurance_snapshots", (("source", "TEXT"),))
 
 
+def _migrate_4_retention(conn: sqlite3.Connection) -> None:
+    """Run 29: time indexes so the retention sweep does not scan whole tables."""
+    for table in ("decisions", "fleet_events", "attestation_key_uses", "lifecycle_events"):
+        conn.execute(f"CREATE INDEX IF NOT EXISTS {table}_created ON {table} (created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS assurance_snapshots_source_time"
+                 " ON assurance_snapshots (source, created_at)")
+
+
 # Ordered, append-only. Each step runs in its own transaction together with the
 # user_version bump, so a failure leaves the previous version intact.
-MIGRATIONS = ((1, _migrate_1_adopt), (2, _migrate_2_lifecycle), (3, _migrate_3_continuity))
+MIGRATIONS = ((1, _migrate_1_adopt), (2, _migrate_2_lifecycle), (3, _migrate_3_continuity),
+              (4, _migrate_4_retention))
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
@@ -552,6 +561,57 @@ class DeviceRegistry:
                 self._event(device_id, EVENT_KEY_ROTATED, STATUS_ACTIVE, STATUS_ACTIVE, "system", None, now)
         except sqlite3.IntegrityError as exc:
             raise DuplicateDeviceKey("attested key already enrolled") from exc
+        return True
+
+    # --- Run 29: retention and erasure ---------------------------------------------
+
+    ERASED = "erased"
+
+    def purge(self, cutoffs: dict[str, float]) -> dict[str, int]:
+        """Delete rows older than the cutoffs (epoch seconds), one transaction.
+
+        Never touches device records, their enrollment/key-rotation snapshots or
+        retired-key tombstones: those enforce that a revoked or retired key never
+        enrolls again and anchor key continuity.
+        """
+        out: dict[str, int] = {}
+        with self._lock, self._conn:
+            for table in ("decisions", "fleet_events", "attestation_key_uses", "lifecycle_events"):
+                out[table] = self._conn.execute(
+                    f"DELETE FROM {table} WHERE created_at < ?", (cutoffs[table],)).rowcount
+            out["scan_snapshots"] = self._conn.execute(
+                "DELETE FROM assurance_snapshots WHERE source = 'scan_refresh' AND created_at < ?",
+                (cutoffs["scan_snapshots"],)).rowcount
+        return out
+
+    def stale_pending(self, older_than: float) -> list[str]:
+        """Pending devices whose state has not changed since ``older_than`` (epoch seconds)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT device_id FROM devices WHERE status = ? AND COALESCE(state_changed_at, enrolled_at) < ?",
+                (STATUS_PENDING, older_than)).fetchall()
+        return [r[0] for r in rows]
+
+    def erase_device(self, device_id: str) -> bool:
+        """Erase everything held about one device; keep only an unlinked key tombstone.
+
+        Deleted: the device record (keys, attested evidence, owner, binding), its
+        snapshots, decisions, lifecycle and fleet events. Kept: SHA-256 hashes of its
+        current and retired device keys in ``retired_keys``, unlinked from the device
+        (device_id "erased"), so the same hardware key can never enroll again.
+        Attestation-key uses are not per device (a keybox hash and a model) and age
+        out by retention. Returns False if the device does not exist.
+        """
+        now = self._clock()
+        with self._lock, self._conn:
+            row = self._conn.execute("SELECT spki_sha256 FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+            if row is None:
+                return False
+            self._conn.execute("INSERT OR IGNORE INTO retired_keys VALUES (?, ?, ?)", (row[0], self.ERASED, now))
+            self._conn.execute("UPDATE retired_keys SET device_id = ? WHERE device_id = ?", (self.ERASED, device_id))
+            for table in ("assurance_snapshots", "decisions", "lifecycle_events", "fleet_events"):
+                self._conn.execute(f"DELETE FROM {table} WHERE device_id = ?", (device_id,))
+            self._conn.execute("DELETE FROM devices WHERE device_id = ?", (device_id,))
         return True
 
     def count(self) -> int:

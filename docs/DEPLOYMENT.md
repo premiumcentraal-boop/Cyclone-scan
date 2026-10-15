@@ -63,9 +63,7 @@ operators ──VPN/SSH──▶ 127.0.0.1:8081 trust-admin (admin API only) ─
 - **Backups:**
   - Use `sqlite3 devices.sqlite ".backup backup.sqlite"` or a volume snapshot while the service is stopped. Copying the file alone during WAL writes is unsafe.
   - Encrypt backups. They contain account identifiers (tenant/account principals) and device public keys.
-- **Retention:**
-  - Refresh snapshots are bounded per device (`history_max_snapshots`).
-  - Decisions, lifecycle events, fleet events and attestation-key uses are **not yet pruned automatically**. Schedule your own deletion according to your privacy policy, e.g. fleet events older than the longest risk window. This is a known gap.
+- **Retention and erasure (Run 29):** the `serve` process deletes rows past the `retention_*` policy periods every hour; `device-trust purge` runs the same sweep once. Users and support can erase a device or a whole account. The full data inventory, defaults and limits are in [PRIVACY.md](PRIVACY.md).
 - **Schema:** migrations run at startup. A database from a newer build is refused, so roll back with the matching backup.
 
 ## Logs
@@ -83,6 +81,5 @@ The decision logs (`device_trust.decisions`) are structured JSON. They contain d
 ## Not covered by this reference
 
 - High availability and horizontal scaling: the challenge store is in-memory per process, so it needs a shared store (see `challenges.py`).
-- Automatic retention.
 - A reviewed multi-tenant design.
 - Penetration testing and certification.

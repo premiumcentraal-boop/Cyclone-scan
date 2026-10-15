@@ -99,6 +99,19 @@ class TrustPolicy:
     # INFO findings and never trigger it.
     scan_history_review: str = "step_up"
 
+    # Retention (Run 29) ---------------------------------------------------------
+    # Rows older than these are deleted by the retention sweep (serve runs it every
+    # retention_sweep_interval_seconds; `device-trust purge` runs it once). Each must
+    # cover the risk window that reads the table. Device records, their enrollment and
+    # key-rotation snapshots and retired-key tombstones are kept while the device
+    # exists, because they enforce "a revoked or retired key never enrolls again".
+    retention_decisions_days: int = 365        # audit trail and per-device velocity
+    retention_fleet_events_days: int = 30      # network/cohort burst history
+    retention_key_uses_days: int = 90          # leaked-keybox history
+    retention_lifecycle_events_days: int = 730
+    retention_scan_snapshots_days: int = 365   # scan-refresh snapshots only
+    retention_sweep_interval_seconds: int = 3600
+
     # Risk scoring (Phase 3) -------------------------------------------------
     risk: RiskPolicy = field(default_factory=RiskPolicy)
 
@@ -168,10 +181,44 @@ class TrustPolicy:
                 raise ValueError(f"expected 32-byte hex digest, got {digest!r}")
         if self.min_security_level < SecurityLevel.TRUSTED_ENVIRONMENT:
             raise ValueError("software-level attestation is never acceptable")
+        self._validate_retention()
         if self.allowed_action_types:
             extra = (self.confirm_key_required_actions | self.play_integrity_required_actions) - self.allowed_action_types
             if extra:
                 raise ValueError(f"action types not in allowed_action_types: {sorted(extra)}")
+
+
+    RETENTION_KEYS = ("retention_decisions_days", "retention_fleet_events_days", "retention_key_uses_days",
+                      "retention_lifecycle_events_days", "retention_scan_snapshots_days",
+                      "retention_sweep_interval_seconds")
+
+    def _validate_retention(self) -> None:
+        for key in self.RETENTION_KEYS:
+            value = getattr(self, key)
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{key} must be a positive integer")
+        day = 86400
+        # A table must outlive the risk window that reads it, or pruning would silently
+        # weaken a risk factor.
+        needs = (
+            ("retention_decisions_days", self.risk.velocity_window_seconds),
+            ("retention_fleet_events_days", self.risk.fleet_window_seconds),
+            ("retention_key_uses_days", self.risk.keybox_window_seconds),
+        )
+        for key, window in needs:
+            if getattr(self, key) * day < window:
+                raise ValueError(f"{key} is shorter than the risk window that reads it ({window} s)")
+
+    def retention_cutoffs(self, now: float) -> dict[str, float]:
+        """Epoch-second cutoffs: rows created before these are deleted."""
+        day = 86400
+        return {
+            "decisions": now - self.retention_decisions_days * day,
+            "fleet_events": now - self.retention_fleet_events_days * day,
+            "attestation_key_uses": now - self.retention_key_uses_days * day,
+            "lifecycle_events": now - self.retention_lifecycle_events_days * day,
+            "scan_snapshots": now - self.retention_scan_snapshots_days * day,
+        }
 
 
 _VERSION_LABEL = re.compile(r"^[A-Za-z0-9._:-]{0,64}$")

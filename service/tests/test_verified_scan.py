@@ -699,14 +699,14 @@ def test_run16_database_upgrades_with_snapshots(tmp_path, monkeypatch):
     old._conn.close()
     monkeypatch.undo()
     reg = DeviceRegistry(path)
-    assert reg.schema_version() == registry_module.SCHEMA_VERSION == 3
+    assert reg.schema_version() == registry_module.SCHEMA_VERSION  # upgraded to the current schema
     assert reg.assurance_history("dev_16")[0]["evidence"] == _snap()
     reg.record_snapshot("dev_16", _snap(source="scan_refresh", device_key_sha256="aa" * 32), keep=1)
     reg.record_snapshot("dev_16", _snap(source="scan_refresh", device_key_sha256="aa" * 32), keep=1)
     assert len(reg.assurance_history("dev_16")) == 2  # legacy enrollment row kept, one refresh
     assert not reg.key_known("never")
     conn = sqlite3.connect(path)
-    conn.execute("PRAGMA user_version = 4")
+    conn.execute(f"PRAGMA user_version = {registry_module.SCHEMA_VERSION + 1}")
     conn.commit()
     conn.close()
     with pytest.raises(SchemaVersionError):

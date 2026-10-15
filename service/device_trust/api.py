@@ -124,6 +124,11 @@ class RevokeBody(_Model):
     reason: str = Field(min_length=1, max_length=200)
 
 
+class AccountErasureBody(_Model):
+    tenant: str = Field(min_length=1, max_length=128)
+    account: str = Field(min_length=1, max_length=128)
+
+
 class StepUpCompletionBody(_Model):
     # The method the customer's backend used to verify the account owner.
     method: Literal[tuple(sorted(STEP_UP_METHODS))]  # type: ignore[valid-type]
@@ -457,6 +462,17 @@ def create_app(
             )
 
         if gateway_token:
+            @app.delete("/v1/devices/{device_id}", status_code=204)
+            def erase_device(device_id: str, request: Request) -> None:
+                """Run 29: erase one device's data on the owner's request (keeps an unlinked key tombstone)."""
+                if not service.erase_owned_device(device_id, principal(request)):
+                    raise HTTPException(status_code=404, detail="device not found")
+
+            @app.delete("/v1/account/data")
+            def erase_account(request: Request) -> dict:
+                """Run 29: erase every device of the authenticated account (account deletion)."""
+                return {"erasedDevices": service.erase_account(principal(request))}
+
             @app.get("/v1/devices/{device_id}/history")
             def device_history(device_id: str, request: Request, limit: int = 20) -> dict:
                 """Owner view of the device's attested history (no evidence JSON or backend reasons)."""
@@ -514,6 +530,29 @@ def create_app(
             _require_admin(authorization)
             if not service.revoke_device(device_id, body.reason):
                 raise HTTPException(status_code=404, detail="device not found")
+
+        @app.delete("/v1/admin/devices/{device_id}", status_code=204)
+        def admin_erase_device(device_id: str, authorization: str = Header(default="")) -> None:
+            """Run 29: support-desk erasure of one device's data."""
+            _require_admin(authorization)
+            if not service.erase_device(device_id):
+                raise HTTPException(status_code=404, detail="device not found")
+
+        @app.post("/v1/admin/accounts/erasure")
+        def admin_erase_account(body: AccountErasureBody, authorization: str = Header(default="")) -> dict:
+            """Run 29: erase every device of one tenant/account (e.g. a closed customer account)."""
+            _require_admin(authorization)
+            try:
+                who = Principal(body.tenant, body.account)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="invalid tenant or account") from None
+            return {"erasedDevices": service.erase_account(who, actor="admin")}
+
+        @app.post("/v1/admin/retention-sweep")
+        def admin_retention_sweep(authorization: str = Header(default="")) -> dict:
+            """Run 29: run the retention sweep now and return the row counts deleted."""
+            _require_admin(authorization)
+            return service.retention_sweep()
 
         @app.post("/v1/admin/devices/{device_id}/step-up-completion", status_code=204)
         def admin_complete_step_up(device_id: str, body: StepUpCompletionBody,

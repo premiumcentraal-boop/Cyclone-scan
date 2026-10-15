@@ -148,6 +148,15 @@ app                                   trust service
 
 **Owner and admin views:**
 - `GET /v1/devices/{id}/history` (gateway mode) returns attested history summaries and findings. It holds no evidence JSON or reasons.
+- Run 28: a rotation is refused (`KEY_ROTATION_DEVICE_CHANGED`) when the new key's attestation contradicts the enrolled device, and honours `require_play_integrity` through an optional `playIntegrityToken` bound to the rotation transcript. A scan whose fresh attestation contradicts the enrolled device returns STEP_UP (`SCAN_DEVICE_EVIDENCE_CHANGED`) unless `scan_history_review` is `"report"`.
+
+### Retention and erasure (Run 29)
+
+- `DELETE /v1/devices/{id}` and `DELETE /v1/account/data` (gateway mode, owner only) erase a device or every device of the account. The key's hash stays as an unlinked tombstone, so that key can never enroll again.
+- Admin: `DELETE /v1/admin/devices/{id}`, `POST /v1/admin/accounts/erasure {tenant, account}`, `POST /v1/admin/retention-sweep`.
+- `serve` deletes rows past the `retention_*` policy periods every `retention_sweep_interval_seconds`; `device-trust purge` and `device-trust erase-account` do the same from the command line.
+
+See [docs/PRIVACY.md](../docs/PRIVACY.md).
 - The admin device view includes the same history.
 
 Policy keys: `policy_version`, `scan_challenge_ttl_seconds`, `scan_max_age_seconds`, `scan_result_ttl_seconds`, `scan_require_fresh_attestation` (default true), `scan_require_play_integrity`, `history_max_snapshots`.
