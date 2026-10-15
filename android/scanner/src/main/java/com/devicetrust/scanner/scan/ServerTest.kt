@@ -6,7 +6,9 @@ import com.devicetrust.client.BiometricPromptAuthenticator
 import com.devicetrust.client.DeviceTrustClient
 import com.devicetrust.client.EnrollmentStore
 import com.devicetrust.client.HttpTrustApi
+import com.devicetrust.client.PlayIntegrityTokenSource
 import com.devicetrust.client.ServerDiagnostics
+import com.devicetrust.client.ServerScan
 import com.devicetrust.client.SharedPreferencesEnrollmentStore
 import com.devicetrust.client.signals.AndroidSignalProbe
 import com.devicetrust.client.signals.DeviceSignals
@@ -21,17 +23,29 @@ data class ServerStep(val title: String, val decision: String, val detail: Strin
  * biometric-confirmed payment. Run the server with --expose-reasons to see
  * reason codes and risk factors.
  */
-class ServerTest(private val activity: FragmentActivity, baseUrl: String) {
+class ServerTest(private val activity: FragmentActivity, baseUrl: String, cloudProjectNumber: Long? = null) {
     private val store: EnrollmentStore = SharedPreferencesEnrollmentStore(activity)
     // Cleartext only for LAN testing against a laptop; production must be HTTPS.
     private val api = HttpTrustApi(baseUrl.trim(), allowCleartextForTesting = baseUrl.trim().startsWith("http://"))
     private val client = DeviceTrustClient(
         api = api,
         attester = AndroidKeyAttester(activity),
-        integrity = null,
+        // Without a Cloud project the scan result says Play Integrity was not requested.
+        integrity = cloudProjectNumber?.let { PlayIntegrityTokenSource(activity, it) },
         store = store,
         signals = DeviceSignals(AndroidSignalProbe(activity)),
     )
+
+    /** Run 17: server-verified scan of the current enrollment (repeat it to build history). */
+    suspend fun verifiedScan(): ServerScan = client.verifiedScan()
+
+    /** Run 17: replace the enrolled keys with new ones the current key authorises. */
+    suspend fun rotateKeys(): ServerStep {
+        val result = client.rotateKeys(withConfirmKey = true)
+        return ServerStep("Key rotation", result.decision.name,
+            if (result.rotated) "new keys in use" + if (result.hasConfirmKey == true) " · new biometric key" else ""
+            else "not rotated: the old keys stay in use", result.diagnostics)
+    }
 
     suspend fun run(onStep: (ServerStep) -> Unit) {
         client.reset()

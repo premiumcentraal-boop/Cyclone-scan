@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.devicetrust.client.ServerScan
 import com.devicetrust.scanner.attest.Check
 import com.devicetrust.scanner.scan.BiometricTest
 import com.devicetrust.scanner.scan.ScanResult
@@ -41,6 +42,10 @@ class ScannerViewModel(app: Application) : AndroidViewModel(app) {
     val serverSteps = mutableStateListOf<ServerStep>()
     var serverError by mutableStateOf<String?>(null)
         private set
+    var cloudProject by mutableStateOf(prefs.getString("cloud_project", "").orEmpty())
+        private set
+    var serverScan by mutableStateOf<ServerScan?>(null)
+        private set
 
     fun runScan() {
         if (scan == ScanState.Running) return
@@ -72,14 +77,48 @@ class ScannerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("server_url", url).apply()
     }
 
+    fun updateCloudProject(value: String) {
+        cloudProject = value.filter(Char::isDigit)
+        prefs.edit().putString("cloud_project", cloudProject).apply()
+    }
+
+    private fun serverTest(activity: FragmentActivity) =
+        ServerTest(activity, serverUrl, cloudProject.toLongOrNull())
+
+    private fun launchServer(block: suspend () -> Unit) {
+        if (serverRunning) return
+        serverRunning = true
+        serverError = null
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: Exception) {
+                serverError = e.message ?: e.javaClass.simpleName
+            } finally {
+                serverRunning = false
+            }
+        }
+    }
+
+    /** Run 17: a server verdict on this phone now; every failure is shown as "not server-verified". */
+    fun runVerifiedScan(activity: FragmentActivity) = launchServer {
+        serverScan = null
+        serverScan = serverTest(activity).verifiedScan()
+    }
+
+    fun runKeyRotation(activity: FragmentActivity) = launchServer {
+        serverSteps.add(serverTest(activity).rotateKeys())
+    }
+
     fun runServer(activity: FragmentActivity) {
         if (serverRunning) return
         serverRunning = true
         serverSteps.clear()
+        serverScan = null
         serverError = null
         viewModelScope.launch {
             try {
-                ServerTest(activity, serverUrl).run { serverSteps.add(it) }
+                serverTest(activity).run { serverSteps.add(it) }
             } catch (e: Exception) {
                 serverError = e.message ?: e.javaClass.simpleName
             } finally {

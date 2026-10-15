@@ -24,8 +24,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.devicetrust.client.ServerScan
 import com.devicetrust.client.signals.AndroidSignalProbe
 import com.devicetrust.scanner.risk.LocalRisk
+import com.devicetrust.scanner.scan.ServerScanView
 import com.devicetrust.scanner.scan.ServerStep
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,6 +40,11 @@ fun ServerScreen(
     steps: List<ServerStep>,
     error: String?,
     onRun: () -> Unit,
+    cloudProject: String,
+    onCloudProject: (String) -> Unit,
+    serverScan: ServerScan?,
+    onVerifiedScan: () -> Unit,
+    onRotateKeys: () -> Unit,
 ) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -67,6 +74,31 @@ fun ServerScreen(
                 Text(if (running) "Running…" else "Run server test")
             }
         }
+        SectionCard("Server-verified scan", "The server checks this phone now, with fresh hardware attestation") {
+            Text(
+                "Needs an enrollment from the server test. Each scan is compared with this phone's earlier verified " +
+                    "evidence. Optional: a Google Cloud project number linked in Play Console to request Play Integrity.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = cloudProject,
+                onValueChange = onCloudProject,
+                label = { Text("Cloud project number (optional)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onVerifiedScan, enabled = !running && url.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Text("Run server-verified scan")
+            }
+            OutlinedButton(onClick = onRotateKeys, enabled = !running && url.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Text("Rotate enrolled keys")
+            }
+        }
+        serverScan?.let { ServerScanCard(it) }
         if (error != null) {
             SectionCard("Error") {
                 Text(error, color = Red)
@@ -75,6 +107,49 @@ fun ServerScreen(
             }
         }
         steps.forEach { StepCard(it) }
+    }
+}
+
+@Composable
+private fun ServerScanCard(scan: ServerScan) {
+    val headline = ServerScanView.headline(scan, System.currentTimeMillis())
+    val color = when (headline.tone) {
+        ServerScanView.Tone.GOOD -> Green
+        ServerScanView.Tone.CAUTION -> Amber
+        ServerScanView.Tone.BAD -> Red
+        ServerScanView.Tone.NEUTRAL -> Grey
+    }
+    SectionCard("Scan result", headline.detail) {
+        Text(headline.title, color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+        if (scan is ServerScan.Verified) {
+            Text(
+                "Verified ${ServerScanView.time(scan.verifiedAtMillis)} · display until ${ServerScanView.time(scan.freshUntilMillis)}\n" +
+                    "Policy ${scan.policy.version.ifEmpty { "(no label)" }} · digest ${scan.policy.digest} · " +
+                    "${scan.policy.verifierRuleset}\nDecision ${scan.decisionId}",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+            ServerScanView.evidenceRows(scan).forEach { CheckRow(it.label, it.status, it.detail) }
+            scan.coverage?.let { c ->
+                Text("Client checks: " + c.entries.filter { it.value > 0 }.joinToString { "${it.value} ${it.key.lowercase()}" },
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            scan.history?.let { h ->
+                Text(
+                    if (h.compared) "Compared with the previous verified evidence (${h.previousSource})" +
+                        " · ${h.snapshots} snapshots kept"
+                    else "No fresh evidence recorded, so nothing was compared",
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                )
+                h.changes.forEach { CheckRow(ServerScanView.explain(it), ServerScanView.level(it)) }
+            }
+            scan.diagnostics?.let { d ->
+                if (d.reasons.isNotEmpty()) {
+                    Text("Reasons: ${d.reasons.joinToString()}", style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
     }
 }
 

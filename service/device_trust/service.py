@@ -6,10 +6,16 @@
 * Risk scoring (Phase 3): client signals, fresh Play Integrity signals,
   hardware evidence and history add up to an explainable score that can
   turn an otherwise-clean request into STEP_UP or BLOCK. Hard gates always win.
+* Server-verified scan (Run 17): the enrolled key signs a scan transcript with
+  fresh attestation from an ephemeral key; the result is a traceable verdict
+  plus a history comparison. A scan never authorises a business transaction.
+* Key rotation (Run 17): the enrolled key authorises a new attested key; the
+  device record keeps its ID and history, the old key is retired forever.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import secrets
@@ -18,6 +24,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 
 from . import reasons as R
+from . import scan_evidence
+from .evidence_history import (
+    SOURCE_SCAN_REFRESH,
+    VERIFIER_RULESET,
+    compare_continuity,
+    snapshot,
+    source_of,
+    summary,
+)
 from .actions import (
     KEY_CONFIRM,
     KEY_DEVICE,
@@ -106,6 +121,65 @@ class ActionRequest:
 
 
 @dataclass(frozen=True)
+class ScanRequest:
+    device_id: str
+    challenge_id: str
+    scan_data: bytes
+    signature: bytes
+    # Attestation chain of an ephemeral key generated with the scan nonce; None if not sent.
+    fresh_chain: list[bytes] | None = None
+    play_integrity_token: str | None = None
+
+
+# Per-evidence status vocabulary of a scan result (Run 17).
+VERIFIED = "VERIFIED"
+FAILED = "FAILED"
+UNAVAILABLE = "UNAVAILABLE"
+NOT_PROVIDED = "NOT_PROVIDED"
+SIGNED = "SIGNED"
+MALFORMED = "MALFORMED"
+
+
+@dataclass(frozen=True)
+class ScanDecision:
+    decision: str
+    decision_id: str
+    reasons: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+    verified_at_ms: int = 0
+    fresh_until_ms: int = 0
+    policy_version: str = ""
+    policy_digest: str = ""
+    verifier_ruleset: str = VERIFIER_RULESET
+    # deviceKeySignature / freshAttestation / playIntegrity / clientSignals -> status
+    evidence: dict = field(default_factory=dict)
+    history: dict | None = None
+    risk: RiskResult | None = None
+
+
+@dataclass(frozen=True)
+class KeyRotationRequest:
+    device_id: str
+    challenge_id: str
+    rotation_data: bytes
+    old_key_signature: bytes
+    new_key_signature: bytes
+    new_chain: list[bytes]
+    new_confirm_chain: list[bytes] | None = None
+
+
+@dataclass(frozen=True)
+class KeyRotationDecision:
+    decision: str
+    decision_id: str
+    reasons: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+    rotated: bool = False
+    has_confirm_key: bool = False
+    risk: RiskResult | None = None
+
+
+@dataclass(frozen=True)
 class ActionDecision:
     decision: str
     decision_id: str
@@ -174,6 +248,27 @@ class DeviceTrustService:
         if record is None or not record.active:
             return None
         return self._challenges.issue(bound_to=device_id, ttl_seconds=self.policy.action_challenge_ttl_seconds)
+
+    def _gate_reason(self, record) -> str | None:
+        """Why a known, owned device may not act/scan/rotate now (None: it may)."""
+        if record.status == STATUS_REVOKED:
+            return R.DEVICE_REVOKED
+        if record.status == STATUS_PENDING:
+            return R.DEVICE_PENDING
+        if self.policy.require_bound_device and record.binding != BINDING_BOUND:
+            return R.DEVICE_REBINDING_REQUIRED
+        return None
+
+    def issue_device_challenge(self, device_id: str, purpose: str,
+                               principal: Principal | None = None) -> Challenge | None:
+        """Run 17 scan / key-rotation challenge; None for unknown, not-owned or non-active devices."""
+        binding = scan_evidence.challenge_binding(purpose, device_id)
+        if self.policy.require_principal and principal is None:
+            return None
+        record = self._owned(device_id, principal)
+        if record is None or self._gate_reason(record) is not None:
+            return None
+        return self._challenges.issue(bound_to=binding, ttl_seconds=self.policy.scan_challenge_ttl_seconds)
 
     # --- lifecycle (Run 16) ---------------------------------------------------
 
@@ -250,6 +345,7 @@ class DeviceTrustService:
                 "brand": (ev.get("attested_ids") or {}).get("brand"),
                 "model": (ev.get("attested_ids") or {}).get("model"),
             },
+            "history": self._history_entries(device_id, 20),
             "decisions": [
                 {
                     "decisionId": d["decision_id"],
@@ -264,6 +360,21 @@ class DeviceTrustService:
                 for d in self._registry.decisions_for(device_id, limit)
             ],
         }
+
+    def device_history(self, device_id: str, principal: Principal | None, limit: int = 20) -> dict | None:
+        """Owner view of attested history: summaries and comparison findings, no evidence JSON."""
+        if self._owned(device_id, principal) is None:
+            return None
+        return {"deviceId": device_id, "snapshots": self._history_entries(device_id, limit)}
+
+    def _history_entries(self, device_id: str, limit: int) -> list[dict]:
+        rows = self._registry.assurance_history(device_id, limit + 1)  # +1: compare the oldest shown
+        out = []
+        for i, row in enumerate(rows[:limit]):
+            older = rows[i + 1] if i + 1 < len(rows) else None
+            out.append({"at": row["at"], **summary(row["evidence"]),
+                        "changes": compare_continuity(older["evidence"], row["evidence"]) if older else []})
+        return out
 
     def fleet_summary(self, window_seconds: float | None = None, limit: int = 10) -> dict:
         return self._registry.fleet_summary(window_seconds or 24 * 3600, limit)
@@ -418,6 +529,241 @@ class DeviceTrustService:
         reasons.extend(play.reasons)
         return play.signals
 
+    # --- Run 17: server-verified scan -----------------------------------------
+
+    def _transcript_reasons(self, doc, device_id, challenge_id, nonce, now) -> list[str]:
+        out = []
+        if doc.device_id != device_id or doc.challenge_id != challenge_id or doc.nonce != b64url(nonce):
+            out.append(R.SCAN_EVIDENCE_MISMATCH)
+        now_ms = int((now.timestamp() if now else time.time()) * 1000)
+        if (doc.timestamp_ms > now_ms + self.policy.clock_skew_seconds * 1000
+                or now_ms - doc.timestamp_ms > self.policy.scan_max_age_seconds * 1000):
+            out.append(R.SCAN_STALE)
+        return out
+
+    def verify_scan(self, req: ScanRequest, now: datetime | None = None,
+                    principal: Principal | None = None) -> ScanDecision:
+        """Verify one server scan. Authenticates the transcript before any attestation or Play work."""
+        decision_id = "dec_" + secrets.token_urlsafe(12)
+        evidence = {"deviceKeySignature": NOT_PROVIDED, "freshAttestation": NOT_PROVIDED,
+                    "playIntegrity": NOT_PROVIDED, "clientSignals": NOT_PROVIDED}
+        # Burn the challenge first so it can never be retried, whatever happens next.
+        nonce = self._challenges.consume(
+            req.challenge_id, bound_to=scan_evidence.challenge_binding(scan_evidence.PURPOSE_SCAN, req.device_id))
+
+        def finish(reasons, warnings=(), history=None, risk=None, record_known=True):
+            return self._finish_scan(decision_id, req.device_id if record_known else None, reasons, warnings,
+                                     evidence, history, risk, now)
+
+        if self.policy.require_principal and principal is None:
+            return finish([R.PRINCIPAL_REQUIRED], record_known=False)
+        record = self._owned(req.device_id, principal)
+        if record is None:
+            return finish([R.DEVICE_UNKNOWN], record_known=False)
+        if (gate := self._gate_reason(record)) is not None:
+            return finish([gate])
+        if nonce is None:
+            return finish([R.CHALLENGE_UNKNOWN])
+        try:
+            doc = scan_evidence.parse(req.scan_data, scan_evidence.PURPOSE_SCAN)
+        except ValueError:
+            return finish([R.SCAN_EVIDENCE_MALFORMED])
+        reasons = self._transcript_reasons(doc, req.device_id, req.challenge_id, nonce, now)
+        if doc.chain_sha256 != scan_evidence.chain_digests(req.fresh_chain):
+            reasons.append(R.SCAN_EVIDENCE_MISMATCH)
+        signature_ok = verify_signature(record.public_key_spki, req.scan_data, req.signature)
+        evidence["deviceKeySignature"] = VERIFIED if signature_ok else FAILED
+        if not signature_ok:
+            reasons.append(R.SIGNATURE_INVALID)
+        if reasons:
+            # Unauthenticated or mis-bound: no attestation, Play or history work is done for it.
+            return finish(reasons)
+
+        warnings: list[str] = []
+        fresh = None
+        if req.fresh_chain:
+            att = self._verifier.verify(req.fresh_chain, nonce, doc.device, now=now)
+            reasons.extend(att.reasons)
+            warnings.extend(att.notes)
+            leaf_sha = att.evidence.leaf_spki_sha256 if att.evidence else None
+            reused = leaf_sha is not None and self._registry.key_known(leaf_sha)
+            if reused:
+                reasons.append(R.FRESH_ATTESTATION_KEY_REUSED)
+            if att.ok and not reused:
+                fresh = att
+            evidence["freshAttestation"] = VERIFIED if fresh is not None else FAILED
+        elif self.policy.scan_require_fresh_attestation:
+            reasons.append(R.SCAN_FRESH_ATTESTATION_MISSING)
+
+        play_before = len(reasons)
+        play_signals = self._check_play(req.play_integrity_token,
+                                        scan_evidence.request_hash(scan_evidence.PURPOSE_SCAN, req.scan_data),
+                                        self.policy.scan_require_play_integrity, reasons, warnings, now)
+        if req.play_integrity_token:
+            evidence["playIntegrity"] = (UNAVAILABLE if play_signals is None
+                                         else FAILED if len(reasons) > play_before else VERIFIED)
+
+        client_signals = None
+        if doc.signals is not None:
+            try:
+                client_signals = parse_client_signals(doc.signals)
+                evidence["clientSignals"] = SIGNED
+            except SignalsError:
+                reasons.append(R.SIGNALS_MALFORMED)
+                evidence["clientSignals"] = MALFORMED
+
+        attested = asdict(fresh.evidence) if fresh is not None else record.evidence
+        key_sha = attested.get("attestation_key_sha256")
+        now_s = now.timestamp() if now else time.time()
+        risk = assess(
+            RiskInput(client_signals, play_signals, attested, device_age_seconds=now_s - record.enrolled_at,
+                      # Read-only: scans never add to a keybox's enrollment history.
+                      keybox=self._registry.attestation_key_stats(key_sha, self.policy.risk.keybox_window_seconds)
+                      if key_sha else None),
+            self.policy.risk, self.policy.signing_cert_sha256, action_type=None, now=now,
+        )
+        if (risk_reason := _risk_reason(risk)) is not None:
+            reasons.append(risk_reason)
+
+        history = self._scan_history(record, fresh)
+        return finish(reasons, warnings, history, risk)
+
+    def _scan_history(self, record, fresh: AttestationResult | None) -> dict:
+        """Persist a verified refresh snapshot (if any) and compare it with the latest one."""
+        rows = self._registry.assurance_history(record.device_id, 1)
+        previous = rows[0] if rows else None
+        out = {"snapshots": None, "previousAt": previous["at"] if previous else None,
+               "previousSource": source_of(previous["evidence"]) if previous else None,
+               "compared": False, "changes": []}
+        if fresh is not None:
+            current = snapshot(fresh.evidence, fresh.leaf_public_key_spki, source=SOURCE_SCAN_REFRESH,
+                               device_key_sha256=hashlib.sha256(record.public_key_spki).hexdigest())
+            if previous is not None:
+                out["changes"] = compare_continuity(previous["evidence"], current)
+                out["compared"] = True
+            self._registry.record_snapshot(record.device_id, current, self.policy.history_max_snapshots)
+        out["snapshots"] = len(self._registry.assurance_history(record.device_id, 100))
+        return out
+
+    def _finish_scan(self, decision_id, device_id, reasons, warnings, evidence, history, risk, now) -> ScanDecision:
+        reasons_t = tuple(dict.fromkeys(reasons))
+        decision = decide(reasons_t)
+        verified_at_ms = int((now.timestamp() if now else time.time()) * 1000)
+        if device_id is not None:
+            self._registry.record_decision(decision_id, device_id, "scan", None, decision,
+                                           risk.score if risk else None, list(risk.factors) if risk else [],
+                                           list(reasons_t))
+        result = ScanDecision(
+            decision=decision, decision_id=decision_id, reasons=reasons_t,
+            warnings=tuple(dict.fromkeys(warnings)), verified_at_ms=verified_at_ms,
+            fresh_until_ms=verified_at_ms + self.policy.scan_result_ttl_seconds * 1000,
+            policy_version=self.policy.policy_version, policy_digest=self.policy.digest(),
+            evidence=dict(evidence), history=history, risk=risk,
+        )
+        log.info(json.dumps({
+            "event": "scan", "decision_id": decision_id, "decision": decision, "reasons": list(reasons_t),
+            "warnings": list(result.warnings), "device_id": device_id, "evidence": result.evidence,
+            "history_changes": [c["code"] for c in (history or {}).get("changes", [])],
+            "risk_score": risk.score if risk else None, "risk_factors": risk.factor_names() if risk else None,
+        }, sort_keys=True))
+        return result
+
+    # --- Run 17: key rotation ---------------------------------------------------
+
+    def rotate_key(self, req: KeyRotationRequest, now: datetime | None = None,
+                   principal: Principal | None = None) -> KeyRotationDecision:
+        """The enrolled key authorises a new attested key. Only ALLOW changes anything."""
+        decision_id = "dec_" + secrets.token_urlsafe(12)
+        nonce = self._challenges.consume(
+            req.challenge_id,
+            bound_to=scan_evidence.challenge_binding(scan_evidence.PURPOSE_KEY_ROTATION, req.device_id))
+
+        def finish(reasons, warnings=(), *, rotated=False, has_confirm=False, risk=None, known=True):
+            return self._finish_rotation(decision_id, req.device_id if known else None, reasons, warnings,
+                                         rotated, has_confirm, risk)
+
+        if self.policy.require_principal and principal is None:
+            return finish([R.PRINCIPAL_REQUIRED], known=False)
+        record = self._owned(req.device_id, principal)
+        if record is None:
+            return finish([R.DEVICE_UNKNOWN], known=False)
+        if (gate := self._gate_reason(record)) is not None:
+            return finish([gate])
+        if nonce is None:
+            return finish([R.CHALLENGE_UNKNOWN])
+        try:
+            doc = scan_evidence.parse(req.rotation_data, scan_evidence.PURPOSE_KEY_ROTATION)
+        except ValueError:
+            return finish([R.SCAN_EVIDENCE_MALFORMED])
+        reasons = self._transcript_reasons(doc, req.device_id, req.challenge_id, nonce, now)
+        if (doc.chain_sha256 != scan_evidence.chain_digests(req.new_chain)
+                or doc.confirm_chain_sha256 != scan_evidence.chain_digests(req.new_confirm_chain)):
+            reasons.append(R.SCAN_EVIDENCE_MISMATCH)
+        if not verify_signature(record.public_key_spki, req.rotation_data, req.old_key_signature):
+            reasons.append(R.SIGNATURE_INVALID)
+        if reasons:
+            return finish(reasons)
+
+        att = self._verifier.verify(req.new_chain, nonce, doc.device, now=now)
+        reasons = list(att.reasons)
+        warnings = list(att.notes)
+        new_spki = att.leaf_public_key_spki
+        if new_spki is None or not verify_signature(new_spki, req.rotation_data, req.new_key_signature):
+            reasons.append(R.KEY_ROTATION_PROOF_INVALID)
+        if att.evidence is not None and self._registry.key_known(att.evidence.leaf_spki_sha256):
+            reasons.append(R.KEY_ALREADY_ENROLLED)
+        confirm = None
+        if req.new_confirm_chain:
+            confirm = self._verifier.verify(req.new_confirm_chain, nonce, doc.device, now=now)
+            reasons.extend(self._confirm_key_reasons(att, confirm))
+            if confirm.evidence is not None and self._registry.key_known(confirm.evidence.leaf_spki_sha256):
+                reasons.append(R.CONFIRM_KEY_INVALID)
+
+        risk = None
+        if att.evidence is not None:
+            new_evidence = asdict(att.evidence)
+            keybox = None
+            if not reasons and att.evidence.attestation_key_sha256:
+                # As at enrollment: only fresh, verified ownership contributes to key history.
+                self._registry.record_attestation_key(
+                    att.evidence.attestation_key_sha256, decision_id, device_model_key(new_evidence, doc.device))
+                keybox = self._registry.attestation_key_stats(
+                    att.evidence.attestation_key_sha256, self.policy.risk.keybox_window_seconds)
+            now_s = now.timestamp() if now else time.time()
+            risk = assess(RiskInput(None, None, new_evidence, device_age_seconds=now_s - record.enrolled_at,
+                                    reported_ids=doc.device, keybox=keybox),
+                          self.policy.risk, self.policy.signing_cert_sha256, action_type=None, now=now)
+            if (risk_reason := _risk_reason(risk)) is not None:
+                reasons.append(risk_reason)
+
+        if decide(reasons) != ALLOW:
+            # STEP_UP and BLOCK change nothing: recovery is an authenticated new enrollment.
+            return finish(reasons, warnings, risk=risk)
+        try:
+            rotated = self._registry.rotate_key(
+                req.device_id, hashlib.sha256(record.public_key_spki).hexdigest(), new_spki, att.evidence,
+                confirm.leaf_public_key_spki if confirm else None, confirm.evidence if confirm else None)
+        except DuplicateDeviceKey:
+            return finish(reasons + [R.KEY_ALREADY_ENROLLED], warnings, risk=risk)
+        if not rotated:
+            return finish(reasons + [R.KEY_ROTATION_CONFLICT], warnings, risk=risk)
+        self._lifecycle_log(req.device_id, "key_rotated", "system")
+        return finish(reasons, warnings, rotated=True, has_confirm=confirm is not None, risk=risk)
+
+    def _finish_rotation(self, decision_id, device_id, reasons, warnings, rotated, has_confirm,
+                         risk) -> KeyRotationDecision:
+        reasons_t = tuple(dict.fromkeys(reasons))
+        decision = decide(reasons_t) if rotated or reasons_t else BLOCK
+        if device_id is not None:
+            self._registry.record_decision(decision_id, device_id, "key_rotation", None, decision,
+                                           risk.score if risk else None, list(risk.factors) if risk else [],
+                                           list(reasons_t))
+        log.info(json.dumps({"event": "key_rotation", "decision_id": decision_id, "decision": decision,
+                             "rotated": rotated, "reasons": list(reasons_t), "device_id": device_id,
+                             "risk_score": risk.score if risk else None}, sort_keys=True))
+        return KeyRotationDecision(decision, decision_id, reasons_t, tuple(dict.fromkeys(warnings)), rotated,
+                                   has_confirm and rotated, risk)
+
     # --- Phase 2: signed actions ---------------------------------------------
 
     def verify_action(self, req: ActionRequest, now: datetime | None = None,
@@ -433,12 +779,8 @@ class DeviceTrustService:
         if record is None:
             # Unknown and not-owned devices get the same answer.
             return self._finish_action(decision_id, req, [R.DEVICE_UNKNOWN], warnings, None)
-        if record.status == STATUS_REVOKED:
-            return self._finish_action(decision_id, req, [R.DEVICE_REVOKED], warnings, None)
-        if record.status == STATUS_PENDING:
-            return self._finish_action(decision_id, req, [R.DEVICE_PENDING], warnings, None)
-        if self.policy.require_bound_device and record.binding != BINDING_BOUND:
-            return self._finish_action(decision_id, req, [R.DEVICE_REBINDING_REQUIRED], warnings, None)
+        if (gate := self._gate_reason(record)) is not None:
+            return self._finish_action(decision_id, req, [gate], warnings, None)
         if nonce is None:
             return self._finish_action(decision_id, req, [R.CHALLENGE_UNKNOWN], warnings, None)
 

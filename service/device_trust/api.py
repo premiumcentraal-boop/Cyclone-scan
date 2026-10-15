@@ -21,7 +21,8 @@ from .enrollment_proof import MAX_PROOF_BYTES
 from .challenges import Challenge, ChallengeCapacityExceeded
 from .lifecycle import REVOKE_REASONS, STEP_UP_METHODS, Principal
 from .play_integrity import b64url
-from .service import ActionRequest, DeviceTrustService, EnrollmentRequest
+from .scan_evidence import MAX_TRANSCRIPT_BYTES, PURPOSES
+from .service import ActionRequest, DeviceTrustService, EnrollmentRequest, KeyRotationRequest, ScanRequest
 
 MAX_CERT_B64_CHARS = 16 * 1024
 MAX_TOKEN_CHARS = 16 * 1024
@@ -137,6 +138,77 @@ class DeviceStatusOut(_Model):
     has_confirm_key: bool = Field(alias="hasConfirmKey")
 
 
+class DeviceChallengeBody(_Model):
+    device_id: str = Field(alias="deviceId", min_length=1, max_length=128)
+    purpose: Literal[PURPOSES]  # type: ignore[valid-type]
+
+
+class ScanBody(_Model):
+    device_id: str = Field(alias="deviceId", min_length=1, max_length=128)
+    challenge_id: str = Field(alias="challengeId", min_length=1, max_length=128)
+    scan_data: str = Field(alias="scanData", min_length=1, max_length=MAX_TRANSCRIPT_BYTES * 2)
+    signature: str = Field(min_length=1, max_length=1024)
+    fresh_attestation_chain: list[str] | None = Field(default=None, alias="freshAttestationChain",
+                                                      min_length=1, max_length=10)
+    play_integrity_token: str | None = Field(default=None, alias="playIntegrityToken", max_length=MAX_TOKEN_CHARS)
+
+
+class ScanPolicyOut(_Model):
+    version: str
+    digest: str
+    verifier_ruleset: str = Field(alias="verifierRuleset")
+
+
+class HistoryChangeOut(_Model):
+    code: str
+    level: str
+    field: str
+
+
+class ScanHistoryOut(_Model):
+    snapshots: int
+    previous_at: float | None = Field(default=None, alias="previousAt")
+    previous_source: str | None = Field(default=None, alias="previousSource")
+    compared: bool
+    changes: list[HistoryChangeOut]
+
+
+class ScanResponse(_Model):
+    decision: str
+    decision_id: str = Field(alias="decisionId")
+    verified_at: int = Field(alias="verifiedAt")
+    fresh_until: int = Field(alias="freshUntil")
+    policy: ScanPolicyOut
+    evidence: dict[str, str]
+    # Run 14 client check coverage counts; explanatory only.
+    coverage: dict[str, int] | None = None
+    history: ScanHistoryOut | None = None
+    reasons: list[str] | None = None
+    warnings: list[str] | None = None
+    risk: RiskOut | None = None
+
+
+class KeyRotationBody(_Model):
+    device_id: str = Field(alias="deviceId", min_length=1, max_length=128)
+    challenge_id: str = Field(alias="challengeId", min_length=1, max_length=128)
+    rotation_data: str = Field(alias="rotationData", min_length=1, max_length=MAX_TRANSCRIPT_BYTES * 2)
+    old_key_signature: str = Field(alias="oldKeySignature", min_length=1, max_length=1024)
+    new_key_signature: str = Field(alias="newKeySignature", min_length=1, max_length=1024)
+    new_attestation_chain: list[str] = Field(alias="newAttestationChain", min_length=1, max_length=10)
+    new_confirm_key_chain: list[str] | None = Field(default=None, alias="newConfirmKeyChain",
+                                                    min_length=1, max_length=10)
+
+
+class KeyRotationResponse(_Model):
+    decision: str
+    decision_id: str = Field(alias="decisionId")
+    rotated: bool
+    has_confirm_key: bool | None = Field(default=None, alias="hasConfirmKey")
+    reasons: list[str] | None = None
+    warnings: list[str] | None = None
+    risk: RiskOut | None = None
+
+
 def _b64(value: str, field: str) -> bytes:
     try:
         normalized = value.strip().replace("-", "+").replace("_", "/")
@@ -191,7 +263,7 @@ def create_app(
                 return forwarded.split(",")[0].strip()
         return request.client.host if request.client else None
 
-    app = FastAPI(title="Device Trust Service", version="0.5.0")
+    app = FastAPI(title="Device Trust Service", version="0.6.0")
 
     def principal(request: Request) -> Principal | None:
         if not gateway_token:
@@ -284,7 +356,93 @@ def create_app(
             risk=_risk_out(result.risk) if expose_reasons else None,
         )
 
+    @app.post("/v1/device-challenges", status_code=201, response_model=ChallengeResponse,
+              response_model_by_alias=True)
+    def create_device_challenge(body: DeviceChallengeBody, request: Request) -> ChallengeResponse:
+        """Run 17: single-use scan or key-rotation challenge for one active device the caller owns."""
+        who = principal(request)
+        try:
+            c = service.issue_device_challenge(body.device_id, body.purpose, who)
+        except ChallengeCapacityExceeded:
+            raise HTTPException(status_code=503, detail="try again later") from None
+        if c is None:
+            raise HTTPException(status_code=404, detail="device not enrolled")
+        return _challenge_response(c)
+
+    @app.post("/v1/scans/verify", response_model=ScanResponse, response_model_by_alias=True,
+              response_model_exclude_none=True)
+    def verify_scan(body: ScanBody, request: Request) -> ScanResponse:
+        """Run 17: server-verified scan. Reports what was verified; never authorises a transaction."""
+        who = principal(request)
+        scan_data = _b64(body.scan_data, "scanData")
+        if len(scan_data) > MAX_TRANSCRIPT_BYTES:
+            raise HTTPException(status_code=422, detail="scanData too large")
+        result = service.verify_scan(
+            ScanRequest(
+                device_id=body.device_id,
+                challenge_id=body.challenge_id,
+                scan_data=scan_data,
+                signature=_b64(body.signature, "signature"),
+                fresh_chain=_decode_chain(body.fresh_attestation_chain) if body.fresh_attestation_chain else None,
+                play_integrity_token=body.play_integrity_token,
+            ),
+            principal=who,
+        )
+        coverage = dict(result.risk.coverage) if result.risk is not None and result.risk.coverage is not None else None
+        return ScanResponse(
+            decision=result.decision,
+            decisionId=result.decision_id,
+            verifiedAt=result.verified_at_ms,
+            freshUntil=result.fresh_until_ms,
+            policy=ScanPolicyOut(version=result.policy_version, digest=result.policy_digest,
+                                 verifierRuleset=result.verifier_ruleset),
+            evidence=result.evidence,
+            coverage=coverage,
+            history=ScanHistoryOut(**result.history) if result.history is not None else None,
+            reasons=list(result.reasons) if expose_reasons else None,
+            warnings=list(result.warnings) if expose_reasons else None,
+            risk=_risk_out(result.risk) if expose_reasons else None,
+        )
+
+    @app.post("/v1/key-rotations", response_model=KeyRotationResponse, response_model_by_alias=True,
+              response_model_exclude_none=True)
+    def rotate_key(body: KeyRotationBody, request: Request) -> KeyRotationResponse:
+        """Run 17: the enrolled key authorises a new attested key. Only ALLOW changes the device."""
+        who = principal(request)
+        rotation_data = _b64(body.rotation_data, "rotationData")
+        if len(rotation_data) > MAX_TRANSCRIPT_BYTES:
+            raise HTTPException(status_code=422, detail="rotationData too large")
+        result = service.rotate_key(
+            KeyRotationRequest(
+                device_id=body.device_id,
+                challenge_id=body.challenge_id,
+                rotation_data=rotation_data,
+                old_key_signature=_b64(body.old_key_signature, "oldKeySignature"),
+                new_key_signature=_b64(body.new_key_signature, "newKeySignature"),
+                new_chain=_decode_chain(body.new_attestation_chain),
+                new_confirm_chain=_decode_chain(body.new_confirm_key_chain) if body.new_confirm_key_chain else None,
+            ),
+            principal=who,
+        )
+        return KeyRotationResponse(
+            decision=result.decision,
+            decisionId=result.decision_id,
+            rotated=result.rotated,
+            hasConfirmKey=result.has_confirm_key if result.rotated else None,
+            reasons=list(result.reasons) if expose_reasons else None,
+            warnings=list(result.warnings) if expose_reasons else None,
+            risk=_risk_out(result.risk) if expose_reasons else None,
+        )
+
     if gateway_token:
+        @app.get("/v1/devices/{device_id}/history")
+        def device_history(device_id: str, request: Request, limit: int = 20) -> dict:
+            """Owner view of the device's attested history (no evidence JSON or backend reasons)."""
+            history = service.device_history(device_id, principal(request), limit=max(1, min(limit, 50)))
+            if history is None:
+                raise HTTPException(status_code=404, detail="device not found")
+            return history
+
         @app.get("/v1/devices/{device_id}", response_model=DeviceStatusOut, response_model_by_alias=True)
         def device_status(device_id: str, request: Request) -> DeviceStatusOut:
             """Owner view of one device's lifecycle state (no evidence or backend reasons)."""

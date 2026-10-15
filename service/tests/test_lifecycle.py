@@ -260,7 +260,7 @@ def _run22_db(path):
 
 def test_fresh_database_gets_current_schema(tmp_path):
     reg = DeviceRegistry(tmp_path / "fresh.sqlite")
-    assert reg.schema_version() == SCHEMA_VERSION == 2
+    assert reg.schema_version() == SCHEMA_VERSION == 3  # Run 17 added migration 3
 
 
 def test_phase1_database_is_adopted_and_upgraded(tmp_path):
@@ -268,7 +268,7 @@ def test_phase1_database_is_adopted_and_upgraded(tmp_path):
     _phase1_db(path)
     reg = DeviceRegistry(path)
     record = reg.get("dev_old")
-    assert reg.schema_version() == 2
+    assert reg.schema_version() == SCHEMA_VERSION
     assert record.status == "active" and record.binding == "UNKNOWN" and record.owner_account is None
 
 
@@ -280,7 +280,7 @@ def test_run22_database_keeps_rows_and_snapshots(tmp_path):
     assert reg.assurance_history("dev_r22")[0]["evidence"] == {"v": 1}
     # Repeat startup is a no-op.
     again = DeviceRegistry(path)
-    assert again.schema_version() == 2 and again.get("dev_r22").status == "revoked"
+    assert again.schema_version() == SCHEMA_VERSION and again.get("dev_r22").status == "revoked"
 
 
 def test_failed_migration_rolls_back_completely(tmp_path, monkeypatch):

@@ -1,7 +1,9 @@
 # Cyclone Scan — Device Trust
 
-Bank-grade Android device verification: is this a genuine, unmodified phone
-running the real app?
+Android device verification: is this a genuine, unmodified phone running the
+real app? Bank-grade assurance is the goal, not a measured certification: no
+build has been certified, and physical-device validation is still outstanding
+(see the [build log](docs/BUILD_LOG.md)).
 
 **The phone collects evidence; the server decides.** Trust rests on
 hardware-signed evidence (Android key attestation, checked against Google's
@@ -26,7 +28,9 @@ run only inside the app.
 7. **Run 13:** native own-process collector, native/Kotlin comparisons and honest coverage reporting; see [run notes](docs/RUN_13_NATIVE.md).
 8. **Run 14:** typed coverage for every Kotlin check (detected / clean / could not verify / unsupported), strict server validation, scanner "Verification coverage" card and versioned export; see [run notes](docs/RUN_14_REPORT_COVERAGE.md).
 9. **Run 15:** verifier aligned with Google's guidance and reference verifier: explicit RKP / FACTORY / UNRECOGNIZED chain forms, documented legacy factory-validity treatment, provisioning-info placement and security-level checks, Python/Kotlin attestation vectors; see [run notes](docs/RUN_15_VERIFIER_COMPATIBILITY.md).
-10. **Next delegated runs (see [build log](docs/BUILD_LOG.md)):** 16 device lifecycle, 17 server-verified scan and history, 18 beta packaging, 19 device validation and beta candidate. Normal-phone smoke tests should start as soon as a test device is available.
+10. **Run 16:** device lifecycle (pending / active / revoked), gateway principals and tenant isolation, versioned registry migrations; see [run notes](docs/RUN_16_DEVICE_LIFECYCLE.md).
+11. **Run 17:** server-verified scan with fresh attestation, key rotation authorised by the enrolled key, attested history comparison; see [run notes](docs/RUN_17_VERIFIED_SCAN_HISTORY.md).
+12. **Next delegated runs (see [build log](docs/BUILD_LOG.md)):** 18 beta packaging, 19 device validation and beta candidate. Normal-phone smoke tests should start as soon as a test device is available.
 
 ## Quick start
 

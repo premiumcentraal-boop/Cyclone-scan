@@ -10,8 +10,10 @@ What it does on `enroll()`:
 2. Generates a non-exportable EC P-256 key in AndroidKeyStore with that
    challenge in its attestation certificate. StrongBox is preferred, then the
    TEE. Android 12+ also includes device-property attestation (brand/model/…).
-3. Requests a Play Integrity **standard** token whose `requestHash` binds the
-   challenge and the attested public key (`RequestHash.enrollment`).
+3. Signs an enrollment transcript (challenge, chain digests, `Build` values,
+   signal report) with the new key and requests a Play Integrity **standard**
+   token whose `requestHash` binds those exact bytes
+   (`RequestHash.enrollmentEvidence`; legacy servers: `RequestHash.enrollment`).
 4. Sends chain + token + `Build` values to the server.
 5. If the phone has a strong biometric enrolled, also creates a **confirm key**
    that can only sign after BiometricPrompt and is destroyed when biometrics change.
@@ -35,6 +37,25 @@ lifecycleScope.launch {
     }
 }
 ```
+
+### Server-verified scan and key rotation (Run 17)
+
+```kotlin
+when (val scan = trust.verifiedScan()) {
+    is ServerScan.Verified -> show(scan.label(System.currentTimeMillis()), scan.decision, scan.history)
+    is ServerScan.Unavailable -> showNotVerified(scan.reason)   // never shown as "verified"
+}
+trust.rotateKeys()   // new keys authorised by the enrolled key; switches only if the server rotated
+```
+
+`verifiedScan()` creates a short-lived attested key for the server's nonce, then deletes it. It signs the scan with the enrolled key and returns a server verdict, or `Unavailable`; it never throws for remote failures.
+
+`ServerScan.label(now)` gives one of five labels:
+- `VERIFIED_FRESH`
+- `VERIFIED_PARTIAL` (missing fresh attestation or Play verdict)
+- `VERIFIED_EXPIRED` (past `freshUntil`)
+- `REJECTED`
+- `UNAVAILABLE`
 
 ### Signing sensitive actions (Phase 2)
 

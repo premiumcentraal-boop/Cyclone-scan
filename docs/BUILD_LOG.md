@@ -11,7 +11,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 15 verifier compatibility | CI_PASSED | 63fd3bd → 3d68781 | PR #14; CI 38648998069 | UNVERIFIED | 335 Python tests; 60 risk + 14 attestation vectors |
 | 15b integrate Runs 20–25 | CI_PASSED | 69e3bc5 + 2cd8d99 → 04996b5 | PR #15; CI 38650877770 | UNVERIFIED | Merge of the parallel stack; 390 Python tests |
 | 16 device lifecycle | CI_PASSED | 04996b5 → e042e7d | PR #17; CI 38652134596 | UNVERIFIED | 408 Python tests; states, ownership, migrations |
-| 17 server scan/history | PLANNED | Run 16 successor | Not created | Not executed | External Google setup may be needed |
+| 17 server scan/history | CI_PASSED | 78f8c7b → 07039e1 | PR #18; CI 38667401633 | UNVERIFIED | 488 Python tests; scanner 0.8.0; live Google decode not exercised |
 | 18 beta packaging | PLANNED | Run 17 successor | Not created | Not executed | Stable signing setup dependency |
 | 19 beta validation | PLANNED | Run 18 successor | Not created | Not executed | Normal-device matrix |
 
@@ -82,3 +82,37 @@ A separate stack of draft PRs from the owner's account branches from Run 13 in p
 ### Integration note — Run 26 merged (15 October 2026)
 - `run-26-evidence-input-hardening` (PR #16, head c306521de76b8be506c77366a4354796b26e275e, CI green) merged into `run-16-device-lifecycle` as the agreed single follow-up. Scope: offline assurance tooling input hardening (`tools/assurance/*`, `evidence_json.py`), `test_assurance_adversarial.py`, `docs/assurance/RUN_26_EVIDENCE_INPUTS.md`. No conflicts.
 - Local: 422 Python tests passed after the merge (408 + 14 from Run 26).
+
+### Run 17 — Server-verified scan, refresh, key continuity and history
+- State: CI_PASSED (not DEVICE_VERIFIED; not merged)
+- Head SHA: 07039e11c58e3eeecb7c86b699a4731ae54670b4 (code; later commits update this log only)
+- Started/completed: 15 October 2026
+- Agent: Claude (implementation/integration role, taking over from the outgoing agent per the 15 October handoff)
+- Exact base SHA: 78f8c7bedc62cbee5780146f15807044cdb66968 (`run-16-device-lifecycle`, PR #17).
+  - Rechecked live before branching: the head was unchanged, all 17 PRs were open, and no Run 17, 18, 19 or 27 branch or PR existed.
+- Branch / PR: `run-17-verified-scan-history` → base `run-16-device-lifecycle`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/18
+- Plan and protocol written first: [RUN_17_VERIFIED_SCAN_HISTORY.md](RUN_17_VERIFIED_SCAN_HISTORY.md)
+- Changes delivered: see the "Delivered" section of the run notes.
+- Automated checks actually run locally (Python 3.13, OpenJDK 21, Android SDK 35 / NDK 27.2.12479018 / CMake 3.22.1 installed in the agent container):
+  - `python -m pytest -q service/tests` → 488 passed (422 + 66 new in `test_verified_scan.py`).
+    - Run 16 migration tests now assert `SCHEMA_VERSION` (3) instead of the literal 2; their intent ("upgraded to the current schema") is unchanged.
+  - The full Gradle CI command (`:devicetrust:testDebugUnitTest :devicetrust:lintRelease :devicetrust:assembleRelease :scanner:testReleaseUnitTest :scanner:assembleRelease`) → BUILD SUCCESSFUL.
+    - This is the first time this log records a *local* Android pass. Earlier runs could not reach Google Maven.
+    - The first local attempt hit HTTP 429 from Maven Central; a retry succeeded.
+  - Native host ctest (3/3) and all nine detector mutations rejected.
+  - Signal, enrollment-transcript and new scan/rotation-transcript fixture checks pass.
+  - `check_native_apk.py` passes.
+  - Local JDK is 21, whereas CI uses 17, so CI remains the reference.
+- CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38667401633 (commit 07039e1) — SUCCESS: native host tests + mutations, Python, Android tests/lint/builds, signal, enrollment-transcript and new scan/rotation-transcript steps, ABI check, manifest. APK artifact 11943311095 (debug-key test build; PR CI builds the synthetic merge revision).
+- Physical device / OS / app version: none (UNVERIFIED). Live Google Play Integrity decoding: not exercised; tests use fake decoders.
+- Migration implications:
+  - user_version 2 → 3 adds `retired_keys` and the `assurance_snapshots.source` column. Older snapshots are kept and read as legacy enrollment snapshots.
+  - Scanner 0.7.0/4 → 0.8.0/5.
+  - API version label 0.5.0 → 0.6.0.
+- External dependencies:
+  - Google Cloud project, Play Console linking and service-account credentials for live Play verdicts.
+  - An authorized test phone.
+- Coordination:
+  - Native code is untouched; it is the Run 27 native-review area. No Run 27 PR existed at start.
+  - Run 26 was not re-merged.
+- Next run and verified base: Run 18 (`run-18-beta-packaging`) from the Run 17 head.

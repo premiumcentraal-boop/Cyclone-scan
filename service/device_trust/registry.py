@@ -16,10 +16,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .attestation import AttestationEvidence
-from .evidence_history import snapshot
+from .evidence_history import SOURCE_ENROLLMENT, SOURCE_KEY_ROTATION, snapshot
 from .lifecycle import (
     BINDING_UNKNOWN,
     EVENT_ENROLLED,
+    EVENT_KEY_ROTATED,
     STATUS_ACTIVE,
     STATUS_PENDING,
     STATUS_REVOKED,
@@ -129,9 +130,22 @@ def _migrate_2_lifecycle(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS lifecycle_events_device ON lifecycle_events (device_id, event_id)")
 
 
+def _migrate_3_continuity(conn: sqlite3.Connection) -> None:
+    """Run 17: keys retired by rotation, and a snapshot source column for bounded retention.
+
+    Existing snapshots keep source NULL: they were all written at enrollment and are
+    never pruned.
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS retired_keys ("
+        " spki_sha256 TEXT PRIMARY KEY, device_id TEXT NOT NULL, retired_at REAL NOT NULL)"
+    )
+    _add_columns(conn, "assurance_snapshots", (("source", "TEXT"),))
+
+
 # Ordered, append-only. Each step runs in its own transaction together with the
 # user_version bump, so a failure leaves the previous version intact.
-MIGRATIONS = ((1, _migrate_1_adopt), (2, _migrate_2_lifecycle))
+MIGRATIONS = ((1, _migrate_1_adopt), (2, _migrate_2_lifecycle), (3, _migrate_3_continuity))
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
@@ -218,6 +232,8 @@ class DeviceRegistry:
         now = self._clock()
         try:
             with self._lock, self._conn:
+                if self._retired(evidence.leaf_spki_sha256):
+                    raise DuplicateDeviceKey("attested key was retired by a rotation")
                 self._conn.execute(
                     "INSERT INTO devices (device_id, public_key_spki, spki_sha256, enrolled_at, evidence_json,"
                     " play_signals_json, confirm_key_spki, confirm_evidence_json, status, owner_tenant,"
@@ -239,8 +255,7 @@ class DeviceRegistry:
                         int(now),
                     ),
                 )
-                self._conn.execute("INSERT INTO assurance_snapshots VALUES (?, ?, ?)",
-                                   (device_id, json.dumps(measurement, sort_keys=True), self._clock()))
+                self._insert_snapshot(device_id, measurement, now)
                 self._event(device_id, EVENT_ENROLLED, None, status, "system", binding, now)
         except sqlite3.IntegrityError as exc:
             raise DuplicateDeviceKey("attested key already enrolled") from exc
@@ -448,12 +463,92 @@ class DeviceRegistry:
         }
 
     def assurance_history(self, device_id: str, limit: int = 20) -> list[dict]:
+        """Newest first. Ties (same clock tick) are ordered by insertion."""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT snapshot_json, created_at FROM assurance_snapshots WHERE device_id = ? "
-                "ORDER BY created_at DESC LIMIT ?", (device_id, max(1, min(limit, 100))),
+                "ORDER BY created_at DESC, rowid DESC LIMIT ?", (device_id, max(1, min(limit, 100))),
             ).fetchall()
         return [{"evidence": json.loads(row[0]), "at": row[1]} for row in rows]
+
+    # --- Run 17: refresh snapshots, key continuity --------------------------------
+
+    def _retired(self, spki_sha256: str) -> bool:
+        """Caller holds the lock."""
+        return self._conn.execute(
+            "SELECT 1 FROM retired_keys WHERE spki_sha256 = ?", (spki_sha256,)).fetchone() is not None
+
+    def key_known(self, spki_sha256: str) -> bool:
+        """True if this key is, or was, a device key here (enrolled or retired by rotation)."""
+        with self._lock:
+            return self._retired(spki_sha256) or self._conn.execute(
+                "SELECT 1 FROM devices WHERE spki_sha256 = ?", (spki_sha256,)).fetchone() is not None
+
+    def _insert_snapshot(self, device_id: str, measurement: dict, now: float, keep: int | None = None) -> None:
+        """Caller holds the lock and an open transaction.
+
+        Retention: enrollment and key-rotation snapshots (the continuity chain) are never
+        pruned; at most ``keep`` scan-refresh snapshots are kept per device.
+        """
+        self._conn.execute(
+            "INSERT INTO assurance_snapshots (device_id, snapshot_json, created_at, source) VALUES (?, ?, ?, ?)",
+            (device_id, json.dumps(measurement, sort_keys=True), now, measurement.get("source")),
+        )
+        if keep is not None:
+            self._conn.execute(
+                "DELETE FROM assurance_snapshots WHERE device_id = ? AND source = 'scan_refresh' AND rowid NOT IN"
+                " (SELECT rowid FROM assurance_snapshots WHERE device_id = ? AND source = 'scan_refresh'"
+                "  ORDER BY created_at DESC, rowid DESC LIMIT ?)",
+                (device_id, device_id, max(1, int(keep))),
+            )
+
+    def record_snapshot(self, device_id: str, measurement: dict, keep: int) -> None:
+        """Store a verified scan-refresh snapshot for an existing device."""
+        if measurement.get("source") in (SOURCE_ENROLLMENT, SOURCE_KEY_ROTATION):
+            raise ValueError("enrollment and rotation snapshots are written with their registry change")
+        with self._lock, self._conn:
+            self._insert_snapshot(device_id, measurement, self._clock(), keep)
+
+    def rotate_key(
+        self,
+        device_id: str,
+        old_spki_sha256: str,
+        public_key_spki: bytes,
+        evidence: AttestationEvidence,
+        confirm_key_spki: bytes | None,
+        confirm_evidence: AttestationEvidence | None,
+    ) -> bool:
+        """Replace the device key the old key authorised, atomically.
+
+        Compare-and-swap on (device, current key, active): of concurrent rotations from
+        one old key exactly one succeeds. The old key is retired forever. Returns False
+        when the device is no longer active with that key.
+        Raises DuplicateDeviceKey if the new key is or was enrolled anywhere.
+        """
+        measurement = snapshot(evidence, public_key_spki, source=SOURCE_KEY_ROTATION,
+                               authorized_by_sha256=old_spki_sha256)
+        now = self._clock()
+        try:
+            with self._lock, self._conn:
+                if self._retired(evidence.leaf_spki_sha256):
+                    raise DuplicateDeviceKey("attested key was retired by a rotation")
+                cur = self._conn.execute(
+                    "UPDATE devices SET public_key_spki = ?, spki_sha256 = ?, evidence_json = ?,"
+                    " confirm_key_spki = ?, confirm_evidence_json = ?"
+                    " WHERE device_id = ? AND spki_sha256 = ? AND status = ?",
+                    (public_key_spki, evidence.leaf_spki_sha256, json.dumps(asdict(evidence), sort_keys=True),
+                     confirm_key_spki,
+                     json.dumps(asdict(confirm_evidence), sort_keys=True) if confirm_evidence else None,
+                     device_id, old_spki_sha256, STATUS_ACTIVE),
+                )
+                if cur.rowcount != 1:
+                    return False
+                self._conn.execute("INSERT INTO retired_keys VALUES (?, ?, ?)", (old_spki_sha256, device_id, now))
+                self._insert_snapshot(device_id, measurement, now)
+                self._event(device_id, EVENT_KEY_ROTATED, STATUS_ACTIVE, STATUS_ACTIVE, "system", None, now)
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateDeviceKey("attested key already enrolled") from exc
+        return True
 
     def count(self) -> int:
         with self._lock:
