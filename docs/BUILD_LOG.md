@@ -14,7 +14,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 17 server scan/history | CI_PASSED | 78f8c7b → 07039e1 | PR #18; CI 38667401633 | UNVERIFIED | 488 Python tests; scanner 0.8.0; live Google decode not exercised |
 | 18 beta packaging | CI_PASSED | 165d639 → 7b05048 | PR #19; CI 38673627448, 38674219916 | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
 | 19 beta validation | BLOCKED | 7b05048 → c48221b | PR #20; CI 38674872520 (green) | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
-| 28 review of 17–19 | IMPLEMENTED | 24b7a71 → see entry | see entry | UNVERIFIED | Sprint "beta readiness without hardware"; 6 findings, 5 addressed |
+| 28 review of 17–19 | CI_PASSED | 24b7a71 → ca9d6e7 | PR #21; CI 38759654224 | UNVERIFIED | Sprint "beta readiness without hardware"; 6 findings, 5 addressed |
 | 29 privacy and retention | PLANNED | Run 28 successor | Not created | Not executed | Automatic pruning, deletion, data inventory |
 | 30 phone-test readiness | PLANNED | Run 29 successor | Not created | Not executed | Scanner lab-record export + validator |
 
@@ -175,12 +175,12 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Run 30: phone-test readiness.
 
 ### Run 28 — Review of Runs 17–19
-- State: IMPLEMENTED (CI recorded below once available)
-- Started: 15 October 2026
+- State: CI_PASSED (not DEVICE_VERIFIED; not merged)
+- Started/completed: 15 October 2026
 - Exact base SHA: 24b7a715495942dec610172dc968e85b1b59369a (`run-19-device-validation`, PR #20; rechecked live: no newer commits or PRs)
-- Branch / PR: `run-28-review-17-19` → base `run-19-device-validation`; PR —
+- Branch / PR: `run-28-review-17-19` → base `run-19-device-validation`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/21 (head ca9d6e7, code)
 - Changes delivered: see [RUN_28_REVIEW.md](RUN_28_REVIEW.md). F1 cross-phone key rotation refused; F2 contradicting scans step up and no longer become the history baseline; F3 rotation honours `require_play_integrity`; F4 client-IP requirement documented; F5 admin health check fixed; F6 recorded only.
 - Automated checks actually run: local Python 3.13 → 515 passed. The new review module failed 8 of 10 on 24b7a71 before the fixes. Android: CI only.
-- CI URL and outcome: —
+- CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38759654224 — SUCCESS (all jobs).
 - Physical device: none (UNVERIFIED)
 - Beta-gate approvals: unchanged. `protocol_review` and `integrated_claude_runs` stay UNVERIFIED; this report is input for the human reviewer, not a PASS.
