@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import enum
+import hashlib
 import json
-from dataclasses import dataclass, field, fields
+import re
+from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 
 from .key_description import SecurityLevel
@@ -75,6 +78,21 @@ class TrustPolicy:
     # next completion attempt; the user enrolls again.
     pending_ttl_seconds: int = 7 * 24 * 3600
 
+    # Server-verified scan, refresh and history (Run 17) ----------------------
+    # Operator label returned with every scan result (e.g. "beta-2026-10"). The
+    # result also carries policy_digest(), so the label need not be trusted.
+    policy_version: str = ""
+    scan_challenge_ttl_seconds: int = 120
+    # Scan and key-rotation transcripts older than this (by their own ts) are rejected.
+    scan_max_age_seconds: int = 120
+    # Display/caching bound on a scan result ("freshUntil"); not a guarantee.
+    scan_result_ttl_seconds: int = 300
+    # Require a fresh attestation chain (ephemeral key, scan nonce) for a scan.
+    scan_require_fresh_attestation: bool = True
+    scan_require_play_integrity: bool = False
+    # Scan-refresh snapshots kept per device; enrollment and rotation snapshots are kept.
+    history_max_snapshots: int = 50
+
     # Risk scoring (Phase 3) -------------------------------------------------
     risk: RiskPolicy = field(default_factory=RiskPolicy)
 
@@ -107,10 +125,28 @@ class TrustPolicy:
         policy.validate()
         return policy
 
+    def digest(self) -> str:
+        """First 16 hex of SHA-256 over the canonical policy JSON, secrets excluded.
+
+        Lets an operator match a scan result to the exact policy file that produced it.
+        """
+        data = _plain(self)
+        data.pop("fleet_hash_key", None)
+        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
     def validate(self) -> None:
-        for flag in ("require_bound_enrollment", "require_principal", "require_bound_device"):
+        for flag in ("require_bound_enrollment", "require_principal", "require_bound_device",
+                     "scan_require_fresh_attestation", "scan_require_play_integrity"):
             if type(getattr(self, flag)) is not bool:
                 raise ValueError(f"{flag} must be boolean")
+        for key in ("scan_challenge_ttl_seconds", "scan_max_age_seconds", "scan_result_ttl_seconds",
+                    "history_max_snapshots"):
+            value = getattr(self, key)
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{key} must be a positive integer")
+        if not isinstance(self.policy_version, str) or not _VERSION_LABEL.match(self.policy_version):
+            raise ValueError("policy_version must be at most 64 characters of [A-Za-z0-9._:-]")
         if self.unbound_enrollment_state not in ("active", "pending"):
             raise ValueError("unbound_enrollment_state must be 'active' or 'pending'")
         if type(self.pending_ttl_seconds) is not int or self.pending_ttl_seconds <= 0:
@@ -128,6 +164,23 @@ class TrustPolicy:
             extra = (self.confirm_key_required_actions | self.play_integrity_required_actions) - self.allowed_action_types
             if extra:
                 raise ValueError(f"action types not in allowed_action_types: {sorted(extra)}")
+
+
+_VERSION_LABEL = re.compile(r"^[A-Za-z0-9._:-]{0,64}$")
+
+
+def _plain(value):
+    if isinstance(value, enum.Enum):
+        return value.name
+    if is_dataclass(value):
+        return {f.name: _plain(getattr(value, f.name)) for f in fields(value)}
+    if isinstance(value, (set, frozenset)):
+        return sorted(_plain(v) for v in value)
+    if isinstance(value, dict) or hasattr(value, "items"):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
 
 
 def _normalize_hex(value: str) -> str:

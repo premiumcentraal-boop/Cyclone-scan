@@ -14,6 +14,7 @@ Legal transitions (anything else is refused)::
     pending --step_up_completed--> active
     pending --revoked | pending_expired--> revoked
     active  --revoked--> revoked
+    active  --key_rotated--> active   (Run 17: old key signed for the new key)
 
 The principal (tenant + account) comes only from the authenticated gateway
 context that the customer's backend supplies; a client-supplied account
@@ -42,6 +43,10 @@ EVENT_ENROLLED = "enrolled"
 EVENT_STEP_UP_COMPLETED = "step_up_completed"
 EVENT_REVOKED = "revoked"
 EVENT_PENDING_EXPIRED = "pending_expired"
+# Run 17: the enrolled key authorised a new attested key (active -> active).
+# Not a status transition, so it is not in TRANSITIONS; the registry applies it
+# as one compare-and-swap on the current key.
+EVENT_KEY_ROTATED = "key_rotated"
 
 TRANSITIONS: dict[str, tuple[frozenset[str], str]] = {
     EVENT_STEP_UP_COMPLETED: (frozenset({STATUS_PENDING}), STATUS_ACTIVE),

@@ -77,3 +77,12 @@ ENROLLMENT_LEGACY_UNBOUND = "ENROLLMENT_LEGACY_UNBOUND"
 DEVICE_PENDING = "DEVICE_PENDING"                      # enrolled, awaiting step-up completion
 DEVICE_REBINDING_REQUIRED = "DEVICE_REBINDING_REQUIRED"  # policy requires an evidence-bound enrollment
 PRINCIPAL_REQUIRED = "PRINCIPAL_REQUIRED"              # no authenticated gateway principal
+
+# Server-verified scan and key continuity (Run 17)
+SCAN_EVIDENCE_MALFORMED = "SCAN_EVIDENCE_MALFORMED"      # transcript not the documented strict shape
+SCAN_EVIDENCE_MISMATCH = "SCAN_EVIDENCE_MISMATCH"        # transcript does not describe this request
+SCAN_STALE = "SCAN_STALE"                                # transcript timestamp outside the allowed window
+SCAN_FRESH_ATTESTATION_MISSING = "SCAN_FRESH_ATTESTATION_MISSING"
+FRESH_ATTESTATION_KEY_REUSED = "FRESH_ATTESTATION_KEY_REUSED"  # "fresh" chain is an enrolled/retired key
+KEY_ROTATION_PROOF_INVALID = "KEY_ROTATION_PROOF_INVALID"      # new key did not prove possession
+KEY_ROTATION_CONFLICT = "KEY_ROTATION_CONFLICT"                # device key changed concurrently
