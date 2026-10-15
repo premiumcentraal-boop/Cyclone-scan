@@ -1,0 +1,222 @@
+{
+  "schema": 1,
+  "revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+  "apk_sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+  "decision": "NO_GO",
+  "gates": {
+    "attestation_compatibility": "UNVERIFIED",
+    "candidate_ci": "PASS",
+    "dependency_licenses": "UNVERIFIED",
+    "device_lifecycle": "UNVERIFIED",
+    "integrated_claude_runs": "UNVERIFIED",
+    "live_google_verification": "UNVERIFIED",
+    "privacy_retention": "UNVERIFIED",
+    "protocol_review": "UNVERIFIED",
+    "stable_signing": "UNVERIFIED",
+    "policy_review": "UNVERIFIED",
+    "lab:clean_pixel": "UNVERIFIED",
+    "lab:clean_samsung": "UNVERIFIED",
+    "lab:clean_tee": "UNVERIFIED",
+    "lab:bootloader_unlocked": "UNVERIFIED",
+    "lab:rooted_hidden": "UNVERIFIED",
+    "lab:frida_inprocess": "UNVERIFIED",
+    "lab:lsposed_inprocess": "UNVERIFIED",
+    "lab:repackaged": "UNVERIFIED",
+    "lab:emulator": "UNVERIFIED",
+    "lab:custom_rom": "UNVERIFIED",
+    "lab:offline": "UNVERIFIED",
+    "lab:no_gms": "UNVERIFIED",
+    "lab:accessibility_legitimate": "UNVERIFIED",
+    "lab:vpn_legitimate": "UNVERIFIED",
+    "lab:remote_support_legitimate": "UNVERIFIED",
+    "lab:repeat_scan": "UNVERIFIED",
+    "lab:biometric": "UNVERIFIED",
+    "pilot_sample": "UNVERIFIED",
+    "clean_intervention": "UNVERIFIED",
+    "altered_miss": "UNVERIFIED",
+    "latency_p95": "UNVERIFIED",
+    "no_observed_crashes": "UNVERIFIED"
+  },
+  "blockers": [
+    "altered_miss",
+    "attestation_compatibility",
+    "clean_intervention",
+    "dependency_licenses",
+    "device_lifecycle",
+    "integrated_claude_runs",
+    "lab:accessibility_legitimate",
+    "lab:biometric",
+    "lab:bootloader_unlocked",
+    "lab:clean_pixel",
+    "lab:clean_samsung",
+    "lab:clean_tee",
+    "lab:custom_rom",
+    "lab:emulator",
+    "lab:frida_inprocess",
+    "lab:lsposed_inprocess",
+    "lab:no_gms",
+    "lab:offline",
+    "lab:remote_support_legitimate",
+    "lab:repackaged",
+    "lab:repeat_scan",
+    "lab:rooted_hidden",
+    "lab:vpn_legitimate",
+    "latency_p95",
+    "live_google_verification",
+    "no_observed_crashes",
+    "pilot_sample",
+    "policy_review",
+    "privacy_retention",
+    "protocol_review",
+    "stable_signing"
+  ],
+  "lab": {
+    "schema": 1,
+    "revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+    "apk_sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+    "cases": {
+      "clean_pixel": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "clean_samsung": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "clean_tee": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "bootloader_unlocked": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "rooted_hidden": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "frida_inprocess": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "lsposed_inprocess": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "repackaged": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "emulator": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "custom_rom": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "offline": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "no_gms": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "accessibility_legitimate": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "vpn_legitimate": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "remote_support_legitimate": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "repeat_scan": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      },
+      "biometric": {
+        "status": "NOT_RUN",
+        "measured": 0,
+        "synthetic": 0
+      }
+    },
+    "note": "Origins, ground truth and review are operator declarations, not independently attested facts."
+  },
+  "calibration": {
+    "schema": 1,
+    "revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+    "apk_sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+    "data_status": "INSUFFICIENT_DATA",
+    "policy": {
+      "allow_below": 60,
+      "block_at": 90,
+      "weights_changed": false
+    },
+    "minimums": {
+      "clean_devices": 5,
+      "altered_devices": 3
+    },
+    "counts": {
+      "submitted": 0,
+      "reviewed_latest_scenarios": 0,
+      "eligible_scenarios": 0,
+      "excluded_from_accuracy": 0,
+      "synthetic": 0,
+      "unreviewed": 0,
+      "crashes": 0
+    },
+    "clean_device_intervention": {
+      "errors": 0,
+      "devices": 0,
+      "rate": null,
+      "wilson95": null
+    },
+    "altered_device_miss": {
+      "errors": 0,
+      "devices": 0,
+      "rate": null,
+      "wilson95": null
+    },
+    "latency_ms": {
+      "p50": null,
+      "p95": null,
+      "samples": 0
+    },
+    "limitations": [
+      "Score-policy proxy, not a measurement of every deployed backend policy.",
+      "Ground truth and physical origins are operator declarations.",
+      "Intervals are descriptive and assume independent stable device aliases; scenario correlation remains.",
+      "ALTERED means the declared lab condition, not necessarily malicious activity.",
+      "Pilot sample minimums are review prerequisites, not proof of production accuracy.",
+      "No production policy is modified; no causal or population-wide effectiveness claim."
+    ]
+  },
+  "limitations": [
+    "Approval records, origins and ground truth are operator declarations; digests are references, not signatures.",
+    "Verify referenced review documents, CI results and APK signer independently before distribution.",
+    "Exact revision and APK matching prevents accidental mixing, not malicious evidence fabrication.",
+    "All-pass is readiness for human review, not automatic publication or bank-grade certification.",
+    "Pilot rates and latency are descriptive and do not establish population-wide accuracy."
+  ]
+}

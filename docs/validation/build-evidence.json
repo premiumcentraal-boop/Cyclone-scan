@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "tested_revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+  "artifacts": {
+    "aar": {
+      "file": "aar-first.aar",
+      "sha256": "cfec9555f299d3be8f7377d454b60156963af269e707e57634e9188bbef5ebb7",
+      "size": 235441
+    },
+    "scanner_apk": {
+      "file": "scanner-release.apk",
+      "sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+      "size": 2447024
+    },
+    "sample_apk": {
+      "file": "app-debug.apk",
+      "sha256": "a7b54975c8342bd9fab505146a3d1a453af88104f9962871ba0ded5ffad3961d",
+      "size": 3594830
+    }
+  },
+  "aar_reproducible": true,
+  "signing": {
+    "verified_by": "apksigner",
+    "identity": "TEST_DEBUG_KEY",
+    "signer_sha256": [
+      "a3be9322210b985228ab17325b256403448e5035fcc5e4d2812ca9238abe45ee"
+    ]
+  },
+  "toolchain": {
+    "gradle": "8.9",
+    "android_gradle_plugin": "8.7.3",
+    "kotlin": "2.0.21",
+    "compile_sdk": "35",
+    "ndk": "27.2.12479018",
+    "cmake": "3.22.1",
+    "jvm_target": "17",
+    "version": "0.9.0-beta.1",
+    "version_code": "6",
+    "java": "17.0.20.1"
+  },
+  "limitations": [
+    "The revision is supplied by the caller; PR CI builds a synthetic merge revision.",
+    "Re-signing or rebuilding with a different key or toolchain creates a different APK identity.",
+    "TEST_DEBUG_KEY builds are for testing only and are not the approved distribution identity.",
+    "Reproducibility was compared on one runner; other machines may differ."
+  ]
+}

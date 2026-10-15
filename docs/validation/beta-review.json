@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "revision": "a3ad8978e2c736901d54a7f4c416bf3541a8e541",
+  "apk_sha256": "008209744c920a80580b69182a2651ec0cffd547a29cbe4223305617beb91c61",
+  "approvals": {
+    "attestation_compatibility": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "candidate_ci": {
+      "status": "PASS",
+      "evidence_sha256": "109db4ac41cfa99b50151c39ec493f6d32fe44f0528889dde2fdf7759c74a625"
+    },
+    "dependency_licenses": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "device_lifecycle": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "integrated_claude_runs": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "live_google_verification": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "privacy_retention": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "protocol_review": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    },
+    "stable_signing": {
+      "status": "UNVERIFIED",
+      "evidence_sha256": null
+    }
+  },
+  "policy": {
+    "reviewed": false,
+    "allow_below": 60,
+    "block_at": 90,
+    "max_clean_intervention": 0.0,
+    "max_altered_miss": 0.0,
+    "max_p95_ms": 60000
+  }
+}
