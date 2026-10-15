@@ -100,7 +100,8 @@ class ScanResult(
     }
 
     companion object {
-        const val SCANNER_VERSION = "0.7.0"
+        // Fallback only; the installed versionName is used when it can be read (Run 30).
+        const val SCANNER_VERSION = "unknown"
         const val MAX_DETAIL = 120
         const val EXPORT_NOTICE = "Local diagnostic only. UNAVAILABLE or UNSUPPORTED checks were not verified and are " +
             "not evidence of safety. Play Integrity, server policy, fleet history and official signer verification " +
@@ -198,7 +199,7 @@ class Scanner(private val context: Context) {
             evidence = evidence,
             attestedSignerAvailable = attestedSigners.isNotEmpty(),
             scannerVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
-                .getOrNull() ?: SCANNER_VERSION,
+                .getOrNull() ?: ScanResult.SCANNER_VERSION,
         )
     }
 }
