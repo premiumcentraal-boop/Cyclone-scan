@@ -14,6 +14,8 @@ import hmac
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
+
+from . import __version__
 from pydantic import BaseModel, ConfigDict, Field
 
 from .actions import MAX_SIGNED_DATA_BYTES
@@ -242,8 +244,14 @@ def create_app(
     admin_token: str | None = None,
     trust_forwarded_for: bool = False,
     gateway_token: str | None = None,
+    public: bool = True,
 ) -> FastAPI:
     """Build the API. ``admin_token`` enables the admin endpoints; without it they are absent.
+
+    ``public=False`` (Run 18, ``device-trust serve-admin``) builds an admin-only app with
+    no client endpoints, to run on a separate internal listener so the admin interface is
+    never reachable through the public client path. ``public=True`` with no admin token
+    builds the client-only app.
 
     ``gateway_token`` (Run 16): the service sits behind the customer's backend,
     which authenticates the user and forwards the request with
@@ -263,7 +271,9 @@ def create_app(
                 return forwarded.split(",")[0].strip()
         return request.client.host if request.client else None
 
-    app = FastAPI(title="Device Trust Service", version="0.6.0")
+    if not public and not admin_token:
+        raise ValueError("an admin-only app needs an admin token")
+    app = FastAPI(title="Device Trust Service" if public else "Device Trust Service (admin)", version=__version__)
 
     def principal(request: Request) -> Principal | None:
         if not gateway_token:
@@ -276,195 +286,6 @@ def create_app(
         except ValueError:
             raise HTTPException(status_code=400, detail="invalid principal") from None
 
-    @app.get("/healthz")
-    def healthz() -> dict:
-        return {"status": "ok"}
-
-    @app.post("/v1/challenges", status_code=201, response_model=ChallengeResponse, response_model_by_alias=True)
-    def create_challenge(request: Request) -> ChallengeResponse:
-        who = principal(request)
-        try:
-            c = service.issue_challenge(who)
-        except ChallengeCapacityExceeded:
-            raise HTTPException(status_code=503, detail="try again later") from None
-        return _challenge_response(c)
-
-    @app.post("/v1/enrollments", response_model=EnrollmentResponse, response_model_by_alias=True,
-              response_model_exclude_none=True)
-    def enroll(body: EnrollmentBody, request: Request) -> EnrollmentResponse:
-        reported = body.device.model_dump()
-        req = EnrollmentRequest(
-            challenge_id=body.challenge_id,
-            attestation_chain=_decode_chain(body.attestation_chain),
-            reported_ids={k: reported[k] for k in ID_FIELDS if reported[k]},
-            play_integrity_token=body.play_integrity_token,
-            confirm_key_chain=_decode_chain(body.confirm_key_chain) if body.confirm_key_chain else None,
-            client_signals=body.signals,
-            evidence_data=_b64(body.evidence_data, "evidenceData") if body.evidence_data is not None else None,
-            evidence_signature=_b64(body.evidence_signature, "evidenceSignature") if body.evidence_signature is not None else None,
-            client_ip=client_ip(request),
-        )
-        result = service.enroll(req, principal=principal(request))
-        return EnrollmentResponse(
-            decision=result.decision,
-            decisionId=result.decision_id,
-            deviceId=result.device_id,
-            deviceStatus=result.device_status,
-            reasons=list(result.reasons) if expose_reasons else None,
-            warnings=list(result.warnings) if expose_reasons else None,
-            risk=_risk_out(result.risk) if expose_reasons else None,
-        )
-
-    @app.post("/v1/action-challenges", status_code=201, response_model=ChallengeResponse,
-              response_model_by_alias=True)
-    def create_action_challenge(body: ActionChallengeBody, request: Request) -> ChallengeResponse:
-        who = principal(request)
-        try:
-            c = service.issue_action_challenge(body.device_id, who)
-        except ChallengeCapacityExceeded:
-            raise HTTPException(status_code=503, detail="try again later") from None
-        if c is None:
-            # Same answer for unknown, not-owned, pending and revoked devices.
-            raise HTTPException(status_code=404, detail="device not enrolled")
-        return _challenge_response(c)
-
-    @app.post("/v1/actions/verify", response_model=ActionResponse, response_model_by_alias=True,
-              response_model_exclude_none=True)
-    def verify_action(body: ActionBody, request: Request) -> ActionResponse:
-        who = principal(request)
-        signed_data = _b64(body.signed_data, "signedData")
-        if len(signed_data) > MAX_SIGNED_DATA_BYTES:
-            raise HTTPException(status_code=422, detail="signedData too large")
-        result = service.verify_action(
-            ActionRequest(
-                device_id=body.device_id,
-                challenge_id=body.challenge_id,
-                signed_data=signed_data,
-                signature=_b64(body.signature, "signature"),
-                key=body.key,
-                play_integrity_token=body.play_integrity_token,
-                client_ip=client_ip(request),
-            ),
-            principal=who,
-        )
-        return ActionResponse(
-            decision=result.decision,
-            decisionId=result.decision_id,
-            action=SignedActionOut(type=result.action_type, params=result.params) if result.action_type else None,
-            reasons=list(result.reasons) if expose_reasons else None,
-            warnings=list(result.warnings) if expose_reasons else None,
-            risk=_risk_out(result.risk) if expose_reasons else None,
-        )
-
-    @app.post("/v1/device-challenges", status_code=201, response_model=ChallengeResponse,
-              response_model_by_alias=True)
-    def create_device_challenge(body: DeviceChallengeBody, request: Request) -> ChallengeResponse:
-        """Run 17: single-use scan or key-rotation challenge for one active device the caller owns."""
-        who = principal(request)
-        try:
-            c = service.issue_device_challenge(body.device_id, body.purpose, who)
-        except ChallengeCapacityExceeded:
-            raise HTTPException(status_code=503, detail="try again later") from None
-        if c is None:
-            raise HTTPException(status_code=404, detail="device not enrolled")
-        return _challenge_response(c)
-
-    @app.post("/v1/scans/verify", response_model=ScanResponse, response_model_by_alias=True,
-              response_model_exclude_none=True)
-    def verify_scan(body: ScanBody, request: Request) -> ScanResponse:
-        """Run 17: server-verified scan. Reports what was verified; never authorises a transaction."""
-        who = principal(request)
-        scan_data = _b64(body.scan_data, "scanData")
-        if len(scan_data) > MAX_TRANSCRIPT_BYTES:
-            raise HTTPException(status_code=422, detail="scanData too large")
-        result = service.verify_scan(
-            ScanRequest(
-                device_id=body.device_id,
-                challenge_id=body.challenge_id,
-                scan_data=scan_data,
-                signature=_b64(body.signature, "signature"),
-                fresh_chain=_decode_chain(body.fresh_attestation_chain) if body.fresh_attestation_chain else None,
-                play_integrity_token=body.play_integrity_token,
-            ),
-            principal=who,
-        )
-        coverage = dict(result.risk.coverage) if result.risk is not None and result.risk.coverage is not None else None
-        return ScanResponse(
-            decision=result.decision,
-            decisionId=result.decision_id,
-            verifiedAt=result.verified_at_ms,
-            freshUntil=result.fresh_until_ms,
-            policy=ScanPolicyOut(version=result.policy_version, digest=result.policy_digest,
-                                 verifierRuleset=result.verifier_ruleset),
-            evidence=result.evidence,
-            coverage=coverage,
-            history=ScanHistoryOut(**result.history) if result.history is not None else None,
-            reasons=list(result.reasons) if expose_reasons else None,
-            warnings=list(result.warnings) if expose_reasons else None,
-            risk=_risk_out(result.risk) if expose_reasons else None,
-        )
-
-    @app.post("/v1/key-rotations", response_model=KeyRotationResponse, response_model_by_alias=True,
-              response_model_exclude_none=True)
-    def rotate_key(body: KeyRotationBody, request: Request) -> KeyRotationResponse:
-        """Run 17: the enrolled key authorises a new attested key. Only ALLOW changes the device."""
-        who = principal(request)
-        rotation_data = _b64(body.rotation_data, "rotationData")
-        if len(rotation_data) > MAX_TRANSCRIPT_BYTES:
-            raise HTTPException(status_code=422, detail="rotationData too large")
-        result = service.rotate_key(
-            KeyRotationRequest(
-                device_id=body.device_id,
-                challenge_id=body.challenge_id,
-                rotation_data=rotation_data,
-                old_key_signature=_b64(body.old_key_signature, "oldKeySignature"),
-                new_key_signature=_b64(body.new_key_signature, "newKeySignature"),
-                new_chain=_decode_chain(body.new_attestation_chain),
-                new_confirm_chain=_decode_chain(body.new_confirm_key_chain) if body.new_confirm_key_chain else None,
-            ),
-            principal=who,
-        )
-        return KeyRotationResponse(
-            decision=result.decision,
-            decisionId=result.decision_id,
-            rotated=result.rotated,
-            hasConfirmKey=result.has_confirm_key if result.rotated else None,
-            reasons=list(result.reasons) if expose_reasons else None,
-            warnings=list(result.warnings) if expose_reasons else None,
-            risk=_risk_out(result.risk) if expose_reasons else None,
-        )
-
-    if gateway_token:
-        @app.get("/v1/devices/{device_id}/history")
-        def device_history(device_id: str, request: Request, limit: int = 20) -> dict:
-            """Owner view of the device's attested history (no evidence JSON or backend reasons)."""
-            history = service.device_history(device_id, principal(request), limit=max(1, min(limit, 50)))
-            if history is None:
-                raise HTTPException(status_code=404, detail="device not found")
-            return history
-
-        @app.get("/v1/devices/{device_id}", response_model=DeviceStatusOut, response_model_by_alias=True)
-        def device_status(device_id: str, request: Request) -> DeviceStatusOut:
-            """Owner view of one device's lifecycle state (no evidence or backend reasons)."""
-            status = service.device_status(device_id, principal(request))
-            if status is None:
-                raise HTTPException(status_code=404, detail="device not found")
-            return DeviceStatusOut(**status)
-
-        @app.post("/v1/devices/{device_id}/step-up-completion", response_model=DeviceStatusOut,
-                  response_model_by_alias=True)
-        def complete_step_up(device_id: str, body: StepUpCompletionBody, request: Request) -> DeviceStatusOut:
-            """The customer's backend reports that it verified the account owner (pending -> active)."""
-            who = principal(request)
-            outcome = service.complete_step_up(device_id, body.method, principal=who, actor="gateway")
-            _step_up_http(outcome)
-            return DeviceStatusOut(**service.device_status(device_id, who))
-
-        @app.post("/v1/devices/{device_id}/revoke", status_code=204)
-        def owner_revoke(device_id: str, body: OwnerRevokeBody, request: Request) -> None:
-            if not service.revoke_owned_device(device_id, body.reason, principal(request)):
-                raise HTTPException(status_code=404, detail="device not found")
-
     def _step_up_http(outcome: str) -> None:
         if outcome == "not_found":
             raise HTTPException(status_code=404, detail="device not found")
@@ -472,6 +293,197 @@ def create_app(
             raise HTTPException(status_code=409, detail="device is not awaiting step-up")
         if outcome == "expired":
             raise HTTPException(status_code=410, detail="pending enrollment expired; enroll again")
+
+    @app.get("/healthz")
+    def healthz() -> dict:
+        return {"status": "ok"}
+
+    if public:
+        @app.post("/v1/challenges", status_code=201, response_model=ChallengeResponse, response_model_by_alias=True)
+        def create_challenge(request: Request) -> ChallengeResponse:
+            who = principal(request)
+            try:
+                c = service.issue_challenge(who)
+            except ChallengeCapacityExceeded:
+                raise HTTPException(status_code=503, detail="try again later") from None
+            return _challenge_response(c)
+
+        @app.post("/v1/enrollments", response_model=EnrollmentResponse, response_model_by_alias=True,
+                  response_model_exclude_none=True)
+        def enroll(body: EnrollmentBody, request: Request) -> EnrollmentResponse:
+            reported = body.device.model_dump()
+            req = EnrollmentRequest(
+                challenge_id=body.challenge_id,
+                attestation_chain=_decode_chain(body.attestation_chain),
+                reported_ids={k: reported[k] for k in ID_FIELDS if reported[k]},
+                play_integrity_token=body.play_integrity_token,
+                confirm_key_chain=_decode_chain(body.confirm_key_chain) if body.confirm_key_chain else None,
+                client_signals=body.signals,
+                evidence_data=_b64(body.evidence_data, "evidenceData") if body.evidence_data is not None else None,
+                evidence_signature=_b64(body.evidence_signature, "evidenceSignature") if body.evidence_signature is not None else None,
+                client_ip=client_ip(request),
+            )
+            result = service.enroll(req, principal=principal(request))
+            return EnrollmentResponse(
+                decision=result.decision,
+                decisionId=result.decision_id,
+                deviceId=result.device_id,
+                deviceStatus=result.device_status,
+                reasons=list(result.reasons) if expose_reasons else None,
+                warnings=list(result.warnings) if expose_reasons else None,
+                risk=_risk_out(result.risk) if expose_reasons else None,
+            )
+
+        @app.post("/v1/action-challenges", status_code=201, response_model=ChallengeResponse,
+                  response_model_by_alias=True)
+        def create_action_challenge(body: ActionChallengeBody, request: Request) -> ChallengeResponse:
+            who = principal(request)
+            try:
+                c = service.issue_action_challenge(body.device_id, who)
+            except ChallengeCapacityExceeded:
+                raise HTTPException(status_code=503, detail="try again later") from None
+            if c is None:
+                # Same answer for unknown, not-owned, pending and revoked devices.
+                raise HTTPException(status_code=404, detail="device not enrolled")
+            return _challenge_response(c)
+
+        @app.post("/v1/actions/verify", response_model=ActionResponse, response_model_by_alias=True,
+                  response_model_exclude_none=True)
+        def verify_action(body: ActionBody, request: Request) -> ActionResponse:
+            who = principal(request)
+            signed_data = _b64(body.signed_data, "signedData")
+            if len(signed_data) > MAX_SIGNED_DATA_BYTES:
+                raise HTTPException(status_code=422, detail="signedData too large")
+            result = service.verify_action(
+                ActionRequest(
+                    device_id=body.device_id,
+                    challenge_id=body.challenge_id,
+                    signed_data=signed_data,
+                    signature=_b64(body.signature, "signature"),
+                    key=body.key,
+                    play_integrity_token=body.play_integrity_token,
+                    client_ip=client_ip(request),
+                ),
+                principal=who,
+            )
+            return ActionResponse(
+                decision=result.decision,
+                decisionId=result.decision_id,
+                action=SignedActionOut(type=result.action_type, params=result.params) if result.action_type else None,
+                reasons=list(result.reasons) if expose_reasons else None,
+                warnings=list(result.warnings) if expose_reasons else None,
+                risk=_risk_out(result.risk) if expose_reasons else None,
+            )
+
+        @app.post("/v1/device-challenges", status_code=201, response_model=ChallengeResponse,
+                  response_model_by_alias=True)
+        def create_device_challenge(body: DeviceChallengeBody, request: Request) -> ChallengeResponse:
+            """Run 17: single-use scan or key-rotation challenge for one active device the caller owns."""
+            who = principal(request)
+            try:
+                c = service.issue_device_challenge(body.device_id, body.purpose, who)
+            except ChallengeCapacityExceeded:
+                raise HTTPException(status_code=503, detail="try again later") from None
+            if c is None:
+                raise HTTPException(status_code=404, detail="device not enrolled")
+            return _challenge_response(c)
+
+        @app.post("/v1/scans/verify", response_model=ScanResponse, response_model_by_alias=True,
+                  response_model_exclude_none=True)
+        def verify_scan(body: ScanBody, request: Request) -> ScanResponse:
+            """Run 17: server-verified scan. Reports what was verified; never authorises a transaction."""
+            who = principal(request)
+            scan_data = _b64(body.scan_data, "scanData")
+            if len(scan_data) > MAX_TRANSCRIPT_BYTES:
+                raise HTTPException(status_code=422, detail="scanData too large")
+            result = service.verify_scan(
+                ScanRequest(
+                    device_id=body.device_id,
+                    challenge_id=body.challenge_id,
+                    scan_data=scan_data,
+                    signature=_b64(body.signature, "signature"),
+                    fresh_chain=_decode_chain(body.fresh_attestation_chain) if body.fresh_attestation_chain else None,
+                    play_integrity_token=body.play_integrity_token,
+                ),
+                principal=who,
+            )
+            coverage = dict(result.risk.coverage) if result.risk is not None and result.risk.coverage is not None else None
+            return ScanResponse(
+                decision=result.decision,
+                decisionId=result.decision_id,
+                verifiedAt=result.verified_at_ms,
+                freshUntil=result.fresh_until_ms,
+                policy=ScanPolicyOut(version=result.policy_version, digest=result.policy_digest,
+                                     verifierRuleset=result.verifier_ruleset),
+                evidence=result.evidence,
+                coverage=coverage,
+                history=ScanHistoryOut(**result.history) if result.history is not None else None,
+                reasons=list(result.reasons) if expose_reasons else None,
+                warnings=list(result.warnings) if expose_reasons else None,
+                risk=_risk_out(result.risk) if expose_reasons else None,
+            )
+
+        @app.post("/v1/key-rotations", response_model=KeyRotationResponse, response_model_by_alias=True,
+                  response_model_exclude_none=True)
+        def rotate_key(body: KeyRotationBody, request: Request) -> KeyRotationResponse:
+            """Run 17: the enrolled key authorises a new attested key. Only ALLOW changes the device."""
+            who = principal(request)
+            rotation_data = _b64(body.rotation_data, "rotationData")
+            if len(rotation_data) > MAX_TRANSCRIPT_BYTES:
+                raise HTTPException(status_code=422, detail="rotationData too large")
+            result = service.rotate_key(
+                KeyRotationRequest(
+                    device_id=body.device_id,
+                    challenge_id=body.challenge_id,
+                    rotation_data=rotation_data,
+                    old_key_signature=_b64(body.old_key_signature, "oldKeySignature"),
+                    new_key_signature=_b64(body.new_key_signature, "newKeySignature"),
+                    new_chain=_decode_chain(body.new_attestation_chain),
+                    new_confirm_chain=_decode_chain(body.new_confirm_key_chain) if body.new_confirm_key_chain else None,
+                ),
+                principal=who,
+            )
+            return KeyRotationResponse(
+                decision=result.decision,
+                decisionId=result.decision_id,
+                rotated=result.rotated,
+                hasConfirmKey=result.has_confirm_key if result.rotated else None,
+                reasons=list(result.reasons) if expose_reasons else None,
+                warnings=list(result.warnings) if expose_reasons else None,
+                risk=_risk_out(result.risk) if expose_reasons else None,
+            )
+
+        if gateway_token:
+            @app.get("/v1/devices/{device_id}/history")
+            def device_history(device_id: str, request: Request, limit: int = 20) -> dict:
+                """Owner view of the device's attested history (no evidence JSON or backend reasons)."""
+                history = service.device_history(device_id, principal(request), limit=max(1, min(limit, 50)))
+                if history is None:
+                    raise HTTPException(status_code=404, detail="device not found")
+                return history
+
+            @app.get("/v1/devices/{device_id}", response_model=DeviceStatusOut, response_model_by_alias=True)
+            def device_status(device_id: str, request: Request) -> DeviceStatusOut:
+                """Owner view of one device's lifecycle state (no evidence or backend reasons)."""
+                status = service.device_status(device_id, principal(request))
+                if status is None:
+                    raise HTTPException(status_code=404, detail="device not found")
+                return DeviceStatusOut(**status)
+
+            @app.post("/v1/devices/{device_id}/step-up-completion", response_model=DeviceStatusOut,
+                      response_model_by_alias=True)
+            def complete_step_up(device_id: str, body: StepUpCompletionBody, request: Request) -> DeviceStatusOut:
+                """The customer's backend reports that it verified the account owner (pending -> active)."""
+                who = principal(request)
+                outcome = service.complete_step_up(device_id, body.method, principal=who, actor="gateway")
+                _step_up_http(outcome)
+                return DeviceStatusOut(**service.device_status(device_id, who))
+
+            @app.post("/v1/devices/{device_id}/revoke", status_code=204)
+            def owner_revoke(device_id: str, body: OwnerRevokeBody, request: Request) -> None:
+                if not service.revoke_owned_device(device_id, body.reason, principal(request)):
+                    raise HTTPException(status_code=404, detail="device not found")
+
 
     if admin_token:
         def _require_admin(authorization: str) -> None:

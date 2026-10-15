@@ -1,0 +1,30 @@
+{
+  "package_name": "com.example.yourapp",
+  "signing_cert_sha256": ["0000000000000000000000000000000000000000000000000000000000000000"],
+  "policy_version": "beta-1",
+  "fleet_hash_key": "",
+
+  "require_principal": true,
+  "require_bound_enrollment": true,
+  "require_bound_device": true,
+  "unbound_enrollment_state": "pending",
+  "pending_ttl_seconds": 604800,
+
+  "min_security_level": "TRUSTED_ENVIRONMENT",
+  "max_os_patch_age_months": 12,
+  "require_rkp": false,
+  "legacy_factory_validity_exemption": true,
+
+  "require_play_integrity": false,
+  "require_play_recognized": true,
+  "play_integrity_max_age_seconds": 300,
+
+  "allowed_action_types": ["login", "payment"],
+  "confirm_key_required_actions": ["payment"],
+  "play_integrity_required_actions": [],
+
+  "scan_require_fresh_attestation": true,
+  "scan_require_play_integrity": false,
+  "scan_result_ttl_seconds": 300,
+  "history_max_snapshots": 50
+}

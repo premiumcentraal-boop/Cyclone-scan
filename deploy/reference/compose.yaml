@@ -1,0 +1,57 @@
+# Run 18 reference deployment (single customer). See docs/DEPLOYMENT.md before using it.
+#
+#   phone ──TLS──▶ your backend (authenticates the user) ──TLS──▶ caddy:8443 ──▶ trust:8080
+#   operators (internal network / VPN only) ──▶ 127.0.0.1:8081 trust-admin
+#
+# The trust service is never exposed to phones directly. Secrets are files under
+# ./secrets/ (not in git): policy.json, gateway_token, admin_token and optionally
+# play_service_account.json.
+name: device-trust
+
+services:
+  trust:
+    build: ../../service
+    image: device-trust:0.9.0b1
+    restart: unless-stopped
+    command: ["serve", "--policy", "/run/secrets/policy.json", "--db", "/data/devices.sqlite",
+              "--host", "0.0.0.0", "--port", "8080",
+              "--gateway-token-file", "/run/secrets/gateway_token",
+              "--trust-forwarded-for"]
+      # Add "--play-service-account", "/run/secrets/play_service_account.json" once Play is set up.
+    secrets: [policy.json, gateway_token]
+    volumes: ["trust-data:/data"]
+    networks: [internal]
+
+  trust-admin:
+    image: device-trust:0.9.0b1
+    depends_on: [trust]
+    restart: unless-stopped
+    command: ["serve-admin", "--policy", "/run/secrets/policy.json", "--db", "/data/devices.sqlite",
+              "--host", "0.0.0.0", "--port", "8081", "--admin-token-file", "/run/secrets/admin_token"]
+    secrets: [policy.json, admin_token]
+    volumes: ["trust-data:/data"]
+    networks: [internal]
+    # Loopback only: reach it through SSH/VPN, never from the internet.
+    ports: ["127.0.0.1:8081:8081"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [trust]
+    ports: ["8443:8443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks: [internal]
+
+secrets:
+  policy.json: {file: ./secrets/policy.json}
+  gateway_token: {file: ./secrets/gateway_token}
+  admin_token: {file: ./secrets/admin_token}
+
+volumes:
+  trust-data: {}
+  caddy-data: {}
+
+networks:
+  internal: {}

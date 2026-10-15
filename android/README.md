@@ -21,6 +21,17 @@ What it does on `enroll()`:
 
 No serial, IMEI, account or secret data is collected.
 
+## Add the SDK (Run 18 beta)
+
+```kotlin
+// settings.gradle.kts: the repository you host the published AAR in
+dependencyResolutionManagement { repositories { maven { url = uri("https://your.repo/maven") }; google(); mavenCentral() } }
+// app/build.gradle.kts
+dependencies { implementation("com.devicetrust:devicetrust:0.9.0-beta.1") }
+```
+
+Publish locally with `./gradlew :devicetrust:publishReleasePublicationToLocalBetaRepository` (to `devicetrust/build/repo`). [`sample-integration/`](sample-integration) is a separate build that consumes it exactly this way. Licensing is not yet decided; see [DEPENDENCY_LICENSES.md](../docs/DEPENDENCY_LICENSES.md).
+
 ## Use
 
 ```kotlin

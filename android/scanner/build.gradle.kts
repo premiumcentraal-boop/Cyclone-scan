@@ -12,17 +12,38 @@ android {
         applicationId = "com.devicetrust.scanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.8.0"
+        versionCode = providers.gradleProperty("cyclone.versionCode").get().toInt()
+        versionName = providers.gradleProperty("cyclone.version").get()
+    }
+
+    // Run 18: the approved signing identity comes only from the secret store (CI secrets
+    // or the release operator's environment). This build never generates a key. Without
+    // all four values the release APK is a test build signed with the local debug key;
+    // -Pcyclone.requireReleaseSigning=true turns that into a build failure.
+    val releaseStore = System.getenv("CYCLONE_RELEASE_STORE_FILE")?.takeIf { it.isNotBlank() }
+    val releaseSigning = releaseStore != null && listOf(
+        "CYCLONE_RELEASE_STORE_PASSWORD", "CYCLONE_RELEASE_KEY_ALIAS", "CYCLONE_RELEASE_KEY_PASSWORD",
+    ).all { !System.getenv(it).isNullOrEmpty() }
+    if (!releaseSigning && providers.gradleProperty("cyclone.requireReleaseSigning").orNull == "true") {
+        throw GradleException("release signing required but CYCLONE_RELEASE_* secrets are not set")
+    }
+    signingConfigs {
+        if (releaseSigning) {
+            create("release") {
+                storeFile = file(releaseStore!!)
+                storePassword = System.getenv("CYCLONE_RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("CYCLONE_RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("CYCLONE_RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            // Test build: optimised and NOT debuggable (a debuggable app would flag
-            // itself), signed with the local debug key so it installs directly.
+            // Optimised and NOT debuggable (a debuggable app would flag itself).
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseSigning) "release" else "debug")
         }
     }
 
