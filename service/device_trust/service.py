@@ -309,6 +309,47 @@ class DeviceTrustService:
         self._lifecycle_log(device_id, EVENT_STEP_UP_COMPLETED, actor)
         return STATUS_ACTIVE
 
+    # --- Run 29: retention and erasure ------------------------------------------------
+
+    def retention_sweep(self, now: float | None = None) -> dict:
+        """Expire forgotten pending enrollments and delete rows past their retention period."""
+        now = self._registry_clock() if now is None else now
+        expired = 0
+        for device_id in self._registry.stale_pending(now - self.policy.pending_ttl_seconds):
+            if self._registry.transition(device_id, EVENT_PENDING_EXPIRED, "system", "PENDING_TTL") is not None:
+                expired += 1
+        counts = self._registry.purge(self.policy.retention_cutoffs(now))
+        result = {"pending_expired": expired, **counts}
+        log.info(json.dumps({"event": "retention_sweep", **result}, sort_keys=True))
+        return result
+
+    def erase_owned_device(self, device_id: str, principal: Principal | None) -> bool:
+        """Owner erasure request for one device (through the authenticated gateway)."""
+        if self._owned(device_id, principal) is None:
+            return False
+        return self._erase(device_id, "gateway")
+
+    def erase_account(self, principal: Principal, actor: str = "gateway") -> int:
+        """Erase every device owned by this tenant/account. Returns how many were erased."""
+        erased = 0
+        while True:
+            batch = self._registry.devices_for(principal.tenant, principal.account, limit=200)
+            done = sum(self._erase(device_id, actor) for device_id in batch)
+            erased += done
+            if not done:
+                return erased
+
+    def erase_device(self, device_id: str) -> bool:
+        """Administrator erasure of one device."""
+        return self._erase(device_id, "admin")
+
+    def _erase(self, device_id: str, actor: str) -> bool:
+        ok = self._registry.erase_device(device_id)
+        if ok:
+            # Logged without the device ID: the log is the record that erasure happened.
+            log.info(json.dumps({"event": "device_erased", "actor": actor}, sort_keys=True))
+        return ok
+
     def revoke_owned_device(self, device_id: str, reason: str, principal: Principal | None) -> bool:
         """Owner-initiated revocation (lost phone, user request) through the gateway."""
         if reason not in REVOKE_REASONS:

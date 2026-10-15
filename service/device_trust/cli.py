@@ -61,7 +61,45 @@ def cmd_serve(args: argparse.Namespace) -> int:
         raise SystemExit("policy requires a principal but --gateway-token-file was not given")
     app = create_app(service, expose_reasons=args.expose_reasons, admin_token=admin_token,
                      trust_forwarded_for=args.trust_forwarded_for, gateway_token=gateway_token)
+    _start_retention_sweeper(service)
     uvicorn.run(app, host=args.host, port=args.port)
+    return 0
+
+
+def _start_retention_sweeper(service) -> None:
+    """Run 29: the client process sweeps at startup and then every retention_sweep_interval_seconds."""
+    import threading
+
+    interval = service.policy.retention_sweep_interval_seconds
+
+    def loop() -> None:
+        stop = threading.Event()
+        while not stop.is_set():
+            try:
+                service.retention_sweep()
+            except Exception:  # noqa: BLE001 - a failed sweep must never stop the service
+                logging.getLogger("device_trust.retention").exception("retention sweep failed")
+            stop.wait(interval)
+
+    threading.Thread(target=loop, name="retention-sweep", daemon=True).start()
+
+
+def _offline_service(args: argparse.Namespace) -> DeviceTrustService:
+    """Service for maintenance commands: policy and registry only, no network."""
+    policy = TrustPolicy.from_file(args.policy)
+    return DeviceTrustService(policy, None, ChallengeStore(policy.challenge_ttl_seconds), DeviceRegistry(args.db), None)
+
+
+def cmd_purge(args: argparse.Namespace) -> int:
+    print(json.dumps(_offline_service(args).retention_sweep(), sort_keys=True))
+    return 0
+
+
+def cmd_erase_account(args: argparse.Namespace) -> int:
+    from .lifecycle import Principal
+
+    erased = _offline_service(args).erase_account(Principal(args.tenant, args.account), actor="admin")
+    print(json.dumps({"erasedDevices": erased}))
     return 0
 
 
@@ -157,6 +195,18 @@ def main(argv: list[str] | None = None) -> int:
     revoke.add_argument("--device-id", required=True)
     revoke.add_argument("--reason", required=True)
     revoke.set_defaults(func=cmd_revoke)
+
+    purge = sub.add_parser("purge", help="run the retention sweep once (Run 29)")
+    purge.add_argument("--policy", required=True)
+    purge.add_argument("--db", required=True)
+    purge.set_defaults(func=cmd_purge)
+
+    erase = sub.add_parser("erase-account", help="erase every device of one tenant/account (Run 29)")
+    erase.add_argument("--policy", required=True)
+    erase.add_argument("--db", required=True)
+    erase.add_argument("--tenant", required=True)
+    erase.add_argument("--account", required=True)
+    erase.set_defaults(func=cmd_erase_account)
 
     refresh = sub.add_parser("refresh-roots", help="download Google attestation roots")
     refresh.add_argument("--out", default=str(Path(__file__).parent / "trust_anchors" / "google_roots.json"))

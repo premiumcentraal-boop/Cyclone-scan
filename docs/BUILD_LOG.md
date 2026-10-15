@@ -15,7 +15,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 18 beta packaging | CI_PASSED | 165d639 → 7b05048 | PR #19; CI 38673627448, 38674219916 | UNVERIFIED | 0.9.0-beta.1; AAR + sample + reference deployment; TEST_DEBUG_KEY until signing secrets exist |
 | 19 beta validation | BLOCKED | 7b05048 → c48221b | PR #20; CI 38674872520 (green) | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
 | 28 review of 17–19 | CI_PASSED | 24b7a71 → ca9d6e7 | PR #21; CI 38759654224 | UNVERIFIED | Sprint "beta readiness without hardware"; 6 findings, 5 addressed |
-| 29 privacy and retention | PLANNED | Run 28 successor | Not created | Not executed | Automatic pruning, deletion, data inventory |
+| 29 privacy and retention | CI_PASSED | f98ec72 → 305837f | PR #22; CI 38761296858 | not needed | Retention sweep, erasure, data inventory |
 | 30 phone-test readiness | PLANNED | Run 29 successor | Not created | Not executed | Scanner lab-record export + validator |
 
 ### Run 14 — Report coverage and result accuracy
@@ -184,3 +184,13 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38759654224 — SUCCESS (all jobs).
 - Physical device: none (UNVERIFIED)
 - Beta-gate approvals: unchanged. `protocol_review` and `integrated_claude_runs` stay UNVERIFIED; this report is input for the human reviewer, not a PASS.
+
+### Run 29 — Privacy and retention
+- State: CI_PASSED (not merged)
+- Started/completed: 15 October 2026
+- Exact base SHA: f98ec72 (`run-28-review-17-19`, PR #21)
+- Branch / PR: `run-29-privacy-retention` → base `run-28-review-17-19`; draft PR https://github.com/premiumcentraal-boop/Cyclone-scan/pull/22 (head 305837f, code)
+- Changes delivered: see [RUN_29_PRIVACY_RETENTION.md](RUN_29_PRIVACY_RETENTION.md) and [PRIVACY.md](PRIVACY.md)
+- Automated checks actually run: local Python 3.13 → 530 passed (515 + 15 new).
+- CI URL and outcome: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38761296858 — SUCCESS (all jobs incl. reference image).
+- Beta-gate approvals: `privacy_retention` stays UNVERIFIED until a human privacy review signs off.
