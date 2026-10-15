@@ -213,7 +213,11 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Owner decisions still open: test phone access, Google Cloud/Play setup, signing identity, licence, threshold review, merge order of PRs #1–#23 into `main`.
 
 ### Run 19b — Open-source development stage
-- State: IMPLEMENTED; CI pending. Not DEVICE_VERIFIED; not merged.
+- State: CI_PASSED on 7a11ca6 (not DEVICE_VERIFIED; not merged; no pre-release yet)
+- CI: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38816190597 — SUCCESS (all four jobs).
+  - Build evidence: signer 412b9e05… verified by apksigner as `DEV_KEY`, `aar_reproducible: true`, version 0.9.0-dev.1.
+  - An earlier run on the same commit, 38816190460, was cancelled by the concurrency group when the PR base changed.
+- Dev pre-release: not yet published. The agent environment's proxy refuses tag creation (git push of a tag: HTTP 403; refs API: write not permitted). The owner publishes it with `git tag -a v0.9.0-dev.1 7a11ca6 && git push origin v0.9.0-dev.1`; `dev-release.yml` then builds and attaches the assets.
 - Owner instruction, 15 October 2026: "Make it open source for now and decide the best options for the rest, this is dev apk stage". Decisions and rationale: [RUN_19B_DEV_OPEN_SOURCE.md](RUN_19B_DEV_OPEN_SOURCE.md).
 - Base: aa1b0ce (`run-30-phone-test-readiness`, PR #23).
   - First drafted on Run 19 (24b7a71), then rebuilt on the other session's Runs 28–30 once they were found.
