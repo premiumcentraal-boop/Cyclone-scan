@@ -1,5 +1,11 @@
 # Handoff: publish GitHub pre-release v0.9.0-dev.1
 
+> **Update (16 October 2026): the normal path is now the release PR.**
+> - `.github/workflows/dev-release.yml` also publishes when a push to `run-19b-dev-open-source` changes `android/gradle.properties` or `docs/releases/**`. That push is the owner merging the release PR, #25.
+> - The workflow creates the tag through `gh release create --target`, using its own `contents: write` token. No agent session creates tags or releases or reads signing secrets.
+> - **To publish:** the owner says "merge and publish". The agent then merges PR #25 into `run-19b-dev-open-source`, pushes nothing else to that branch until the publish finishes, and runs the verification below.
+> - Options A and B below remain fallbacks.
+
 Written 16 October 2026 by the Runs 17–19b agent session. The owner asked for this release ("make a real release to GitHub so I can download the APK") and asked for a handoff so another agent can finish it.
 
 ## Why this is a handoff
