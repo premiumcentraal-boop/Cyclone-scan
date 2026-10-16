@@ -232,3 +232,17 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
   - The full Gradle CI command passed.
   - The scanner release APK verified by apksigner as `DEV_KEY`.
 - Repository secrets cannot be read or set from the agent environment (the proxy blocks the Actions secrets API); no production key exists.
+
+### Release — v0.9.0-dev.1 (development pre-release)
+- Published 16 October 2026 on the owner's instruction ("merge and publish"): https://github.com/premiumcentraal-boop/Cyclone-scan/releases/tag/v0.9.0-dev.1
+- Mechanism:
+  - Release PR #25 merged into `run-19b-dev-open-source` (merge commit 618158afe7158da8c95cd851b52fea9fa0deb9cc).
+  - The `Dev pre-release` workflow ([run 38916948934](https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38916948934), first run, all steps green) built the release and created the tag and pre-release with its own token.
+  - The agent session created no tag or release itself.
+- Verified independently after publication:
+  - all five assets downloaded; `sha256sum -c SHA256SUMS` OK
+  - APK SHA-256 81d7078e47368972110e420e1aea2b5a1cb737a2a703d23ab212a6cfd3cfd226
+  - apksigner signer 412b9e05… (CN=Cyclone Scan DEV key, public), `DEV_KEY`
+  - `tested_revision` = 618158a = the tag commit
+  - version 0.9.0-dev.1
+- Status unchanged: a development build, not validated on a physical device (Run 19 NO_GO), no live Google configuration, not for production.
