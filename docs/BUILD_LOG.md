@@ -246,3 +246,17 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
   - `tested_revision` = 618158a = the tag commit
   - version 0.9.0-dev.1
 - Status unchanged: a development build, not validated on a physical device (Run 19 NO_GO), no live Google configuration, not for production.
+
+### Run 31 — Downloadable scanner results and debug report
+- State: IMPLEMENTED; CI pending. Not DEVICE_VERIFIED; not merged.
+- Owner request, 16 October 2026: a downloadable full report including what could not be scanned. Details: [RUN_31_SCANNER_DEBUG_REPORT.md](RUN_31_SCANNER_DEBUG_REPORT.md).
+- Base: 073251e (`run-19b-dev-open-source`, after the v0.9.0-dev.1 release). Branch `run-31-scanner-debug-report`.
+- Version 0.9.0-dev.2 / 7: merging the PR publishes `v0.9.0-dev.2` through the release workflow.
+- Local checks:
+  - The full Gradle CI command passed, with the new `DebugReportTest`.
+  - The AAR was published and the sample built (version now read from gradle.properties).
+  - `check_debug_report.py` on the sample: 47 not-scanned items across 6 kinds.
+  - `check_native_apk.py` passed.
+  - The APK manifest has the `.reports` FileProvider.
+  - Python suite passed.
+- Not verified on a phone: file picker, share sheet.

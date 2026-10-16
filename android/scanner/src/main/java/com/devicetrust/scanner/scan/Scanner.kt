@@ -9,6 +9,7 @@ import com.devicetrust.scanner.attest.Check
 import com.devicetrust.scanner.risk.LocalRisk
 import com.devicetrust.client.signals.AndroidSignalProbe
 import com.devicetrust.client.signals.DeviceSignals
+import com.devicetrust.client.signals.JniNativeProbe
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
@@ -35,6 +36,8 @@ class ScanResult(
     val attestedSignerAvailable: Boolean = false,
     /** Run 30: the installed app's versionName (the constant was not bumped by later runs). */
     val scannerVersion: String = SCANNER_VERSION,
+    /** Run 31: phase timings, outcomes and sanitized errors of this scan (debug report). */
+    val trace: ScanTrace = ScanTrace(),
 ) {
     val hardFailures: List<Check> get() = attestation.hardFailures
     val findings: List<Finding> get() = ReportCoverage.findings(signals)
@@ -119,40 +122,58 @@ class ScanResult(
 class Scanner(private val context: Context) {
     private val attester = AndroidKeyAttester(context)
 
-    fun scan(): ScanResult {
+    /**
+     * Run 31: every step runs as a [ScanTrace] phase. A failing optional step (revocation
+     * list, hardware key, native collector) is recorded with its error and the scan
+     * continues degraded; a failing required step propagates, and the caller still holds
+     * [trace] for the debug report.
+     */
+    fun scan(trace: ScanTrace = ScanTrace()): ScanResult {
         val started = System.currentTimeMillis()
-        val roots = ChainVerifier.rootKeysFromJson(
-            context.assets.open("google_roots.json").use { it.readBytes().toString(Charsets.UTF_8) },
-        )
-        val revoked = ChainVerifier.fetchRevocations()
+        val roots = trace.phase("load_attestation_roots") {
+            ChainVerifier.rootKeysFromJson(
+                context.assets.open("google_roots.json").use { it.readBytes().toString(Charsets.UTF_8) },
+            )
+        }
+        val revocationStart = System.currentTimeMillis()
+        val revocations = ChainVerifier.fetchRevocationsResult()
+        trace.record("revocation_list", if (revocations.isSuccess) ScanTrace.Outcome.OK else ScanTrace.Outcome.FAILED,
+            System.currentTimeMillis() - revocationStart,
+            if (revocations.isSuccess) "${revocations.getOrNull()?.size} entries" else "revocation not established",
+            revocations.exceptionOrNull())
+        val revoked = revocations.getOrNull()
         val challenge = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val alias = "scanner_probe_" + UUID.randomUUID()
         val device = DeviceInfo.current()
 
+        // No hardware-backed attestation at all is reported as a hard failure below; the
+        // exception that caused it is kept in the trace.
         val key = try {
-            attester.generate(alias, challenge)
-        } catch (e: Exception) {
-            null // no hardware-backed attestation at all: reported as a hard failure below
+            trace.optional("hardware_key_generation") { attester.generate(alias, challenge) }
         } finally {
             attester.delete(alias)
         }
-        val report = if (key == null) {
-            AttestationReport(
-                listOf(Check("keygen", "Hardware key attestation available", Check.Status.FAIL,
-                    "this device could not create an attested hardware key")),
-                null, 0, null, revoked != null,
-            )
-        } else {
-            ChainVerifier(roots, revoked).verify(
-                key.chain, challenge, context.packageName,
-                mapOf(
-                    "brand" to device.brand, "device" to device.device, "product" to device.product,
-                    "manufacturer" to device.manufacturer, "model" to device.model,
-                ),
-            )
+        val report = trace.phase("attestation_verification") {
+            if (key == null) {
+                AttestationReport(
+                    listOf(Check("keygen", "Hardware key attestation available", Check.Status.FAIL,
+                        "this device could not create an attested hardware key")),
+                    null, 0, null, revoked != null,
+                )
+            } else {
+                ChainVerifier(roots, revoked).verify(
+                    key.chain, challenge, context.packageName,
+                    mapOf(
+                        "brand" to device.brand, "device" to device.device, "product" to device.product,
+                        "manufacturer" to device.manufacturer, "model" to device.model,
+                    ),
+                )
+            }
         }
 
-        val signals = DeviceSignals(AndroidSignalProbe(context)).collect()
+        val signals = trace.phase("device_signals") { DeviceSignals(AndroidSignalProbe(context)).collect() }
+        JniNativeProbe.lastError?.let { trace.record("native_collector", ScanTrace.Outcome.DEGRADED, 0, it) }
+            ?: trace.record("native_collector", ScanTrace.Outcome.OK, 0)
         // JSON null must not become the string "null" (org.json's optString on NULL).
         val ownDigest = if (signals.isNull("app_signature_sha256")) null else signals.optString("app_signature_sha256").ifEmpty { null }
         val kd = report.keyDescription
@@ -175,12 +196,14 @@ class Scanner(private val context: Context) {
                 bootPatchLevel = hw?.bootPatchLevel,
             )
         }
-        val risk = LocalRisk.assess(
-            signals,
-            evidence,
-            attestedDigests,
-            reportedIds = mapOf("brand" to device.brand, "model" to device.model),
-        )
+        val risk = trace.phase("risk_scoring") {
+            LocalRisk.assess(
+                signals,
+                evidence,
+                attestedDigests,
+                reportedIds = mapOf("brand" to device.brand, "model" to device.model),
+            )
+        }
         val verdict = when {
             report.hardFailures.isNotEmpty() -> Verdict.BLOCK
             else -> Verdict.valueOf(risk.band)
@@ -200,6 +223,7 @@ class Scanner(private val context: Context) {
             attestedSignerAvailable = attestedSigners.isNotEmpty(),
             scannerVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
                 .getOrNull() ?: ScanResult.SCANNER_VERSION,
+            trace = trace,
         )
     }
 }

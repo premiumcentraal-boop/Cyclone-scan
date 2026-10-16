@@ -28,6 +28,7 @@ import com.devicetrust.client.ServerScan
 import com.devicetrust.client.signals.AndroidSignalProbe
 import com.devicetrust.scanner.risk.LocalRisk
 import com.devicetrust.scanner.scan.ServerScanView
+import com.devicetrust.scanner.scan.DebugReport
 import com.devicetrust.scanner.scan.ServerStep
 import org.json.JSONArray
 import org.json.JSONObject
@@ -46,6 +47,7 @@ fun ServerScreen(
     onVerifiedScan: () -> Unit,
     onRotateKeys: () -> Unit,
     onShareLabRecord: (() -> Unit)? = null,
+    buildReport: (suspend () -> DebugReport.Export)? = null,
 ) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -108,6 +110,16 @@ fun ServerScreen(
             }
         }
         steps.forEach { StepCard(it) }
+        if (buildReport != null) {
+            SectionCard("Report file", "Results and debug export for developers") {
+                Text(
+                    "Everything this app ran (local scan, server steps, verified scan, biometric test), what could not " +
+                        "be scanned and why, errors and app/device context. No serial, IMEI, account data or server address.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                ReportExportButtons(buildReport, enabled = !running)
+            }
+        }
         if (onShareLabRecord != null) {
             SectionCard("Lab record (testers)", "For the device-validation matrix (docs/RUN_19_DEVICE_VALIDATION.md)") {
                 Text(
