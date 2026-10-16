@@ -248,7 +248,7 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Status unchanged: a development build, not validated on a physical device (Run 19 NO_GO), no live Google configuration, not for production.
 
 ### Run 31 — Downloadable scanner results and debug report
-- State: IMPLEMENTED; CI pending. Not DEVICE_VERIFIED; not merged.
+- State: CI_PASSED; merged into `run-19b-dev-open-source` as PR #26 (fc63431) and released as v0.9.0-dev.2. Not DEVICE_VERIFIED.
 - Owner request, 16 October 2026: a downloadable full report including what could not be scanned. Details: [RUN_31_SCANNER_DEBUG_REPORT.md](RUN_31_SCANNER_DEBUG_REPORT.md).
 - Base: 073251e (`run-19b-dev-open-source`, after the v0.9.0-dev.1 release). Branch `run-31-scanner-debug-report`.
 - Version 0.9.0-dev.2 / 7: merging the PR publishes `v0.9.0-dev.2` through the release workflow.
@@ -260,3 +260,14 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
   - The APK manifest has the `.reports` FileProvider.
   - Python suite passed.
 - Not verified on a phone: file picker, share sheet.
+
+### Release — v0.9.0-dev.2 (development pre-release)
+- Published 16 October 2026 on the owner's instruction ("merge and publish"): https://github.com/premiumcentraal-boop/Cyclone-scan/releases/tag/v0.9.0-dev.2
+- Mechanism: PR #26 merged (fc63431dbb8770c218a38691b4f61a952b98f3ad); `Dev pre-release` [run 38921266032](https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38921266032) green.
+- Verified after publication:
+  - `sha256sum -c SHA256SUMS` OK
+  - APK SHA-256 1b93abd13976a7e03ce574e91fb7bdea663cf2d5bc0146772157b7f26af9f4d6, versionName 0.9.0-dev.2, versionCode 7
+  - signer 412b9e05… (`DEV_KEY`)
+  - `.reports` FileProvider present
+  - `tested_revision` = fc63431 = tag commit
+- Status: development build; not validated on a physical device; not for production.
