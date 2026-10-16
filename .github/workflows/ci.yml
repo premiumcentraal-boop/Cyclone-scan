@@ -138,6 +138,9 @@ jobs:
           python3 -m tools.assurance.lab_import android/scanner/build/lab-record-sample.json \
             --candidate /tmp/candidate.json --case clean_pixel --alias ci-sample \
             --ground-truth CLEAN --expectation-met unknown
+      - name: Scanner debug report sample is complete and leaks no identifiers
+        working-directory: .
+        run: python3 tools/check_debug_report.py android/scanner/build/debug-report-sample.json
       - name: Verify native ABI packaging and owned code bounds
         working-directory: .
         run: python3 tools/check_native_apk.py

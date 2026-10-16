@@ -1,6 +1,5 @@
 package com.devicetrust.scanner.ui
 
-import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GppBad
 import androidx.compose.material.icons.filled.GppGood
 import androidx.compose.material.icons.filled.GppMaybe
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.devicetrust.scanner.attest.Check
@@ -37,9 +34,10 @@ import com.devicetrust.scanner.risk.LocalRisk
 import com.devicetrust.scanner.scan.LayerState
 import com.devicetrust.scanner.scan.ScanResult
 import com.devicetrust.scanner.scan.Verdict
+import com.devicetrust.scanner.scan.DebugReport
 
 @Composable
-fun ScanScreen(state: ScanState, onScan: () -> Unit) {
+fun ScanScreen(state: ScanState, onScan: () -> Unit, buildReport: suspend () -> DebugReport.Export) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard(
             title = "${Build.MANUFACTURER} ${Build.MODEL}",
@@ -65,16 +63,24 @@ fun ScanScreen(state: ScanState, onScan: () -> Unit) {
             }
         }
         when (state) {
-            is ScanState.Done -> ScanResultView(state.result)
-            is ScanState.Failed -> SectionCard("Scan failed") { Text(state.message, color = Red) }
+            is ScanState.Done -> ScanResultView(state.result, buildReport)
+            is ScanState.Failed -> SectionCard("Scan failed") {
+                Text(state.message, color = Red)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Save or share the report file so developers can see where the scan stopped and why.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                ReportExportButtons(buildReport)
+            }
             else -> Unit
         }
     }
 }
 
 @Composable
-private fun ScanResultView(result: ScanResult) {
-    val context = LocalContext.current
+private fun ScanResultView(result: ScanResult, buildReport: suspend () -> DebugReport.Export) {
     val layers = result.layers
     VerdictCard(result)
 
@@ -122,21 +128,15 @@ private fun ScanResultView(result: ScanResult) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(
-            onClick = {
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/json"
-                    putExtra(Intent.EXTRA_SUBJECT, "Device scan: ${result.device.manufacturer} ${result.device.model}")
-                    putExtra(Intent.EXTRA_TEXT, result.toJson().toString(2))
-                }
-                context.startActivity(Intent.createChooser(send, "Share scan report"))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Filled.Share, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Share diagnostic report (JSON)")
-        }
+        Text(
+            "Report file: the full results plus everything that could not be scanned, with reasons, errors, " +
+                "timings and app/device context, to help developers fix and improve the scanner. Server and " +
+                "biometric results are included when those tabs were run.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        ReportExportButtons(buildReport)
     }
 }
 

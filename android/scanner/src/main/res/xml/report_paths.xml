@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run 31: debug reports are written here before sharing; nothing else is exposed. -->
+<paths>
+    <cache-path name="reports" path="reports/" />
+</paths>
