@@ -211,3 +211,63 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Runs 28–30 are CI_PASSED as stacked draft PRs #21 → #22 → #23 on #20. Nothing is merged or published.
 - Beta gate: unchanged at NO_GO. This sprint produced inputs for `protocol_review`, `integrated_claude_runs` (RUN_28_REVIEW.md) and `privacy_retention` (PRIVACY.md), but those approvals need human sign-off. The 22 phone-dependent blockers now have a faster recording path (Run 30); they still need a phone.
 - Owner decisions still open: test phone access, Google Cloud/Play setup, signing identity, licence, threshold review, merge order of PRs #1–#23 into `main`.
+
+### Run 19b — Open-source development stage
+- State: CI_PASSED on 7a11ca6 (not DEVICE_VERIFIED; not merged; no pre-release yet)
+- CI: https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38816190597 — SUCCESS (all four jobs).
+  - Build evidence: signer 412b9e05… verified by apksigner as `DEV_KEY`, `aar_reproducible: true`, version 0.9.0-dev.1.
+  - An earlier run on the same commit, 38816190460, was cancelled by the concurrency group when the PR base changed.
+- Dev pre-release: not yet published. The agent environment's proxy refuses tag creation (git push of a tag: HTTP 403; refs API: write not permitted). The owner publishes it with `git tag -a v0.9.0-dev.1 7a11ca6 && git push origin v0.9.0-dev.1`; `dev-release.yml` then builds and attaches the assets.
+- Owner instruction, 15 October 2026: "Make it open source for now and decide the best options for the rest, this is dev apk stage". Decisions and rationale: [RUN_19B_DEV_OPEN_SOURCE.md](RUN_19B_DEV_OPEN_SOURCE.md).
+- Base: aa1b0ce (`run-30-phone-test-readiness`, PR #23).
+  - First drafted on Run 19 (24b7a71), then rebuilt on the other session's Runs 28–30 once they were found.
+  - Its own retention implementation was dropped in favour of Run 29's. Run 28's rotation and scan fixes are kept unchanged.
+- Delivered:
+  - Apache-2.0 LICENSE and NOTICE, plus licence metadata in the POM and pyproject.
+  - Version 0.9.0-dev.1 (service 0.9.0.dev1).
+  - A committed public DEV signing key (cert SHA-256 412b9e05c1418d4e5e1e0f86ee21687569b4623231f951e5cf6a8e67cc469416): `DEV_KEY` classification, and the beta config check refuses it.
+  - Tag-triggered GitHub pre-releases (`.github/workflows/dev-release.yml`).
+- Local checks:
+  - Python 547 passed.
+  - The full Gradle CI command passed.
+  - The scanner release APK verified by apksigner as `DEV_KEY`.
+- Repository secrets cannot be read or set from the agent environment (the proxy blocks the Actions secrets API); no production key exists.
+
+### Release — v0.9.0-dev.1 (development pre-release)
+- Published 16 October 2026 on the owner's instruction ("merge and publish"): https://github.com/premiumcentraal-boop/Cyclone-scan/releases/tag/v0.9.0-dev.1
+- Mechanism:
+  - Release PR #25 merged into `run-19b-dev-open-source` (merge commit 618158afe7158da8c95cd851b52fea9fa0deb9cc).
+  - The `Dev pre-release` workflow ([run 38916948934](https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38916948934), first run, all steps green) built the release and created the tag and pre-release with its own token.
+  - The agent session created no tag or release itself.
+- Verified independently after publication:
+  - all five assets downloaded; `sha256sum -c SHA256SUMS` OK
+  - APK SHA-256 81d7078e47368972110e420e1aea2b5a1cb737a2a703d23ab212a6cfd3cfd226
+  - apksigner signer 412b9e05… (CN=Cyclone Scan DEV key, public), `DEV_KEY`
+  - `tested_revision` = 618158a = the tag commit
+  - version 0.9.0-dev.1
+- Status unchanged: a development build, not validated on a physical device (Run 19 NO_GO), no live Google configuration, not for production.
+
+### Run 31 — Downloadable scanner results and debug report
+- State: CI_PASSED; merged into `run-19b-dev-open-source` as PR #26 (fc63431) and released as v0.9.0-dev.2. Not DEVICE_VERIFIED.
+- Owner request, 16 October 2026: a downloadable full report including what could not be scanned. Details: [RUN_31_SCANNER_DEBUG_REPORT.md](RUN_31_SCANNER_DEBUG_REPORT.md).
+- Base: 073251e (`run-19b-dev-open-source`, after the v0.9.0-dev.1 release). Branch `run-31-scanner-debug-report`.
+- Version 0.9.0-dev.2 / 7: merging the PR publishes `v0.9.0-dev.2` through the release workflow.
+- Local checks:
+  - The full Gradle CI command passed, with the new `DebugReportTest`.
+  - The AAR was published and the sample built (version now read from gradle.properties).
+  - `check_debug_report.py` on the sample: 47 not-scanned items across 6 kinds.
+  - `check_native_apk.py` passed.
+  - The APK manifest has the `.reports` FileProvider.
+  - Python suite passed.
+- Not verified on a phone: file picker, share sheet.
+
+### Release — v0.9.0-dev.2 (development pre-release)
+- Published 16 October 2026 on the owner's instruction ("merge and publish"): https://github.com/premiumcentraal-boop/Cyclone-scan/releases/tag/v0.9.0-dev.2
+- Mechanism: PR #26 merged (fc63431dbb8770c218a38691b4f61a952b98f3ad); `Dev pre-release` [run 38921266032](https://github.com/premiumcentraal-boop/Cyclone-scan/actions/runs/38921266032) green.
+- Verified after publication:
+  - `sha256sum -c SHA256SUMS` OK
+  - APK SHA-256 1b93abd13976a7e03ce574e91fb7bdea663cf2d5bc0146772157b7f26af9f4d6, versionName 0.9.0-dev.2, versionCode 7
+  - signer 412b9e05… (`DEV_KEY`)
+  - `.reports` FileProvider present
+  - `tested_revision` = fc63431 = tag commit
+- Status: development build; not validated on a physical device; not for production.

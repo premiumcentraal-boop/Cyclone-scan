@@ -1,0 +1,134 @@
+name: Dev pre-release
+
+# Publishes a GitHub *pre-release* for the version in android/gradle.properties
+# (tag v<cyclone.version>, e.g. v0.9.0-dev.1), with the dev-signed scanner APK, the SDK
+# Maven repository, build evidence and SHA256SUMS. Development builds only: signed with
+# the PUBLIC dev key unless release secrets are configured; never device-validated here.
+#
+# Normal path: the owner merges a release PR into the integration branch. That push
+# changes the version file or the release notes, and this workflow creates the tag
+# (via --target) and the release with the workflow's own token. Agents never create
+# tags or releases themselves and never read signing secrets.
+# Also supported: a pushed v*-dev.* tag, a release published in the GitHub UI (assets
+# are attached to it), and a manual run (workflow_dispatch).
+on:
+  push:
+    branches: ['run-19b-dev-open-source']
+    paths: ['android/gradle.properties', 'docs/releases/**']
+    tags: ['v*-dev.*']
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Several triggers can fire for one release; build one at a time, never cancel a publish.
+concurrency:
+  group: dev-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event_name != 'release' || contains(github.event.release.tag_name, '-dev.')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Version and tag
+        id: version
+        run: |
+          version=$(sed -n 's/^cyclone.version=//p' gradle.properties)
+          case "$version" in *-dev.*) ;; *) echo "not a dev version: $version"; exit 1;; esac
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "tag $GITHUB_REF_NAME != $tag"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Skip if this release already exists (branch push / manual run)
+        id: exists
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "release" ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists; nothing to do"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.exists.outputs.skip != 'true'
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - if: steps.exists.outputs.skip != 'true'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - if: steps.exists.outputs.skip != 'true'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018 cmake;3.22.1"
+      - if: steps.exists.outputs.skip != 'true'
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Test and build
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :devicetrust:testDebugUnitTest :scanner:testReleaseUnitTest \
+            :scanner:assembleRelease :devicetrust:publishReleasePublicationToLocalBetaRepository 2>&1 | tail -20
+      - name: Evidence and signer check
+        if: steps.exists.outputs.skip != 'true'
+        working-directory: .
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          out=android/scanner/build/outputs/apk/release
+          aar=android/devicetrust/build/outputs/aar/devicetrust-release.aar
+          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          python3 -m tools.release.build_evidence --revision "$(git rev-parse HEAD)" \
+            --aar "$aar" --apk "$out/scanner-release.apk" --apksigner "$apksigner" > "$out/build-evidence.json"
+          python3 -m tools.assurance.artifact_manifest "$out/scanner-release.apk" \
+            --revision "$(git rev-parse HEAD)" > "$out/scanner-assurance-manifest.json"
+          echo "{\"signing_cert_sha256\": [\"$(cat android/signing/dev-signer.sha256)\"]}" > "$RUNNER_TEMP/dev-policy.json"
+          python3 -m tools.release.check_signing "$out/scanner-release.apk" --policy "$RUNNER_TEMP/dev-policy.json" \
+            --apksigner "$apksigner" --allow-dev
+          cp "$out/scanner-release.apk" "$RUNNER_TEMP/cyclone-scanner-$VERSION.apk"
+          (cd android/devicetrust/build && zip -qr "$RUNNER_TEMP/devicetrust-maven-repo-$VERSION.zip" repo)
+          cp "$out/build-evidence.json" "$out/scanner-assurance-manifest.json" "$RUNNER_TEMP/"
+          (cd "$RUNNER_TEMP" && sha256sum "cyclone-scanner-$VERSION.apk" "devicetrust-maven-repo-$VERSION.zip" \
+            build-evidence.json scanner-assurance-manifest.json > SHA256SUMS && cat SHA256SUMS)
+      - name: Publish pre-release
+        if: steps.exists.outputs.skip != 'true'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="docs/releases/$TAG.md"
+          if [ ! -f "$notes" ]; then
+            notes="$RUNNER_TEMP/notes.md"
+            printf '%s\n' "**Development build: not for production, not device-validated, not certified.**" "" \
+              "Signed with the public development key (android/signing/README.md). Digests and the exact" \
+              "revision: SHA256SUMS and build-evidence.json. Apache-2.0." > "$notes"
+          fi
+          assets=("$RUNNER_TEMP/cyclone-scanner-$VERSION.apk" "$RUNNER_TEMP/devicetrust-maven-repo-$VERSION.zip"
+                  "$RUNNER_TEMP/build-evidence.json" "$RUNNER_TEMP/scanner-assurance-manifest.json" "$RUNNER_TEMP/SHA256SUMS")
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Published in the GitHub UI (or a tag push raced it): keep its text, attach the assets.
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"
+          else
+            # Creates the tag at the built commit; the agent session never creates tags.
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+              --title "Cyclone Scan $VERSION (development build)" --notes-file "$notes" "${assets[@]}"
+          fi
+          echo "Published: $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"

@@ -1,5 +1,5 @@
 # Run 18 reference image for the Device Trust verification service.
-# Build:  docker build -t device-trust:0.9.0b1 service/
+# Build:  docker build -t device-trust:0.9.0.dev1 service/
 # Pin the base image by digest in your own registry for reproducible deployments.
 FROM python:3.13-slim
 

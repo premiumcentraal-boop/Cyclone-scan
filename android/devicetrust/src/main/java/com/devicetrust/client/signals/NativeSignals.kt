@@ -7,21 +7,33 @@ fun interface NativeProbe { fun collect(): Map<String, NativeState> }
 
 /** One JNI entry point. Library-load errors never abort host collection. */
 object JniNativeProbe : NativeProbe {
-    private val loaded: Boolean by lazy {
-        runCatching { System.loadLibrary("dtnative"); true }.getOrDefault(false)
+    private val loadFailure: Throwable? by lazy {
+        runCatching { System.loadLibrary("dtnative") }.exceptionOrNull()
     }
     private external fun scanRaw(): String?
 
+    /**
+     * Why the last [collect] produced no native results (diagnostics only, Run 31): the
+     * library-load or collection error class and message, or null when it completed.
+     */
+    @Volatile var lastError: String? = null
+        private set
+
     override fun collect(): Map<String, NativeState> {
-        if (!loaded) return NativeSignals.CHECKS.associateWith { NativeState.UNSUPPORTED }
+        loadFailure?.let {
+            lastError = "native library not loaded: ${it.javaClass.simpleName}: ${it.message.orEmpty().take(160)}"
+            return NativeSignals.CHECKS.associateWith { NativeState.UNSUPPORTED }
+        }
         return runCatching {
-            val raw = JSONObject(scanRaw() ?: return@runCatching emptyMap())
+            val raw = JSONObject(scanRaw() ?: error("native collector returned no report"))
             NativeSignals.CHECKS.associateWith { key ->
                 val state = NativeState.valueOf(raw.getString("native_" + key + "_status"))
-                require(raw.getBoolean("native_" + key) == (state == NativeState.DETECTED))
+                require(raw.getBoolean("native_" + key) == (state == NativeState.DETECTED)) { "inconsistent result for $key" }
                 state
             }
-        }.getOrDefault(emptyMap())
+        }.onSuccess { lastError = null }
+            .onFailure { lastError = "native collection failed: ${it.javaClass.simpleName}: ${it.message.orEmpty().take(160)}" }
+            .getOrDefault(emptyMap())
     }
 }
 

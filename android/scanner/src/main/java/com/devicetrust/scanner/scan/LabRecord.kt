@@ -58,7 +58,8 @@ object LabRecord {
             .put("scannedAt", iso(r.scannedAt.time))
     }
 
-    private fun serverJson(run: ServerRun, nowMillis: Long): JSONObject {
+    /** Also used by the Run 31 debug report. */
+    fun serverJson(run: ServerRun, nowMillis: Long): JSONObject {
         val out = JSONObject()
             .put("durationMs", run.durationMs)
             .put("finishedAt", iso(run.finishedAtMillis))

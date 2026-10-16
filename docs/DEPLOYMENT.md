@@ -28,7 +28,7 @@ operators ──VPN/SSH──▶ 127.0.0.1:8081 trust-admin (admin API only) ─
 
 ## Setup
 
-1. Build the image: `docker build -t device-trust:0.9.0b1 service/`.
+1. Build the image: `docker build -t device-trust:0.9.0.dev1 service/`.
 2. Create `deploy/reference/secrets/`. This directory is git-ignored; use mode 0600 files, or your orchestrator's secret store.
    - `policy.json`: copy `policy.beta.json`, then set:
      - `package_name`
@@ -39,7 +39,7 @@ operators ──VPN/SSH──▶ 127.0.0.1:8081 trust-admin (admin API only) ─
    - Optional `play_service_account.json`: a Google Cloud service-account key with the Play Integrity API enabled, linked to your app in Play Console. Then add `--play-service-account` to the `trust` command. Without it, Play results are reported as `UNAVAILABLE` and never as passed.
 3. Check the configuration. This makes no network calls and prints no secrets:
    ```sh
-   docker run --rm -v "$PWD/deploy/reference/secrets:/run/secrets:ro" device-trust:0.9.0b1 \
+   docker run --rm -v "$PWD/deploy/reference/secrets:/run/secrets:ro" device-trust:0.9.0.dev1 \
      check-config --policy /run/secrets/policy.json \
      --gateway-token-file /run/secrets/gateway_token --admin-token-file /run/secrets/admin_token
    ```

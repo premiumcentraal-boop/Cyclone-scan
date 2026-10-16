@@ -1,0 +1,12 @@
+Cyclone Scan — Device Trust
+Copyright 2026 The Cyclone Scan contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It depends on, but does not bundle, Google Play Integrity and Google Play
+services client libraries, which are distributed by Google under their own
+(proprietary) terms; see docs/DEPENDENCY_LICENSES.md.
+
+android/signing/cyclone-dev.jks is a PUBLIC development signing key. Anyone
+can sign software with it. It identifies development builds only and must
+never be trusted by a production verification policy.

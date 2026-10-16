@@ -1,15 +1,15 @@
 # Dependency licences: Run 18 review
 
-Status: **best-effort engineering inventory. This is not legal advice.** The owner must confirm it before promising open-source or commercial distribution.
+Status: **best-effort engineering inventory. This is not legal advice.** The project itself is **Apache-2.0** (Run 19b; see LICENSE and NOTICE).
 
 - Inventory taken on 15 October 2026, from:
   - `:devicetrust` `releaseRuntimeClasspath`: 57 resolved coordinates
   - the installed Python service closure
 - Licences are recorded as each project declares them. Confirm them against the exact versions you ship.
 
-## Blocking owner decisions
+## Licence position
 
-1. **This repository has no licence file.** Until the owner chooses one, the code is "all rights reserved". Nobody may assume an open-source licence. The published POM therefore declares no licence.
+1. **Licence chosen: Apache-2.0** (owner instruction "make it open source", 15 October 2026). The POM and `pyproject.toml` declare it.
 2. **The Android SDK depends on proprietary Google libraries:**
    - `com.google.android.play:integrity`, `core-common`
    - `com.google.android.gms:play-services-basement`, `play-services-tasks`

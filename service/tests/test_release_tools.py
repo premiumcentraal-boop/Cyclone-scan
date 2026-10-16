@@ -61,7 +61,9 @@ def test_check_signing_cli(tmp_path, capsys):
 def test_toolchain_matches_the_build_files():
     tc = build_evidence.toolchain(ROOT / "android")
     assert tc["ndk"] == "27.2.12479018" and tc["cmake"] == "3.22.1" and tc["compile_sdk"] == "35"
-    assert tc["version"] == "0.9.0-beta.1" and tc["version_code"] == "6"
+    props = (ROOT / "android" / "gradle.properties").read_text()
+    assert f"cyclone.version={tc['version']}" in props and f"cyclone.versionCode={tc['version_code']}" in props
+    assert tc["version"].startswith("0.9.0-dev.")
     assert tc["gradle"] and tc["android_gradle_plugin"] and tc["kotlin"]
 
 

@@ -12,6 +12,8 @@ build/
 .kotlin/
 local.properties
 *.jks
+# The public development key is committed on purpose (android/signing/README.md).
+!android/signing/cyclone-dev.jks
 *.keystore
 *.p12
 

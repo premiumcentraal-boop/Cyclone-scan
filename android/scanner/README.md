@@ -88,3 +88,7 @@ The Native versus Kotlin group shows nine native checks with per-check availabil
 ## Run 17 (0.8.0)
 
 The server-verified scan and key rotation described above. The local Scan tab is unchanged and still labelled as a local diagnostic. History findings describe changes in hardware-attested evidence. They are not proof of compromise: an OS update legitimately changes the boot image. They also do not prove the evidence came from "the same phone".
+
+## Run 31 (0.9.0-dev.2): report file
+
+"Save report file" (choose Downloads or Drive) and "Share report file" (a `.json` attachment) are on the Scan tab (also after a failed scan) and the Server tab. The file lists everything that could **not** be scanned, each with its reason, a plain explanation and a developer hint, plus errors, phase timings, app and device context, the full scan report, and server and biometric results. See [RUN_31_SCANNER_DEBUG_REPORT.md](../../docs/RUN_31_SCANNER_DEBUG_REPORT.md).
