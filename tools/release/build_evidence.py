@@ -94,7 +94,7 @@ def evidence(revision: str, android_dir: str, aar: str, apk: str, aar_rebuild: s
         "limitations": [
             "The revision is supplied by the caller; PR CI builds a synthetic merge revision.",
             "Re-signing or rebuilding with a different key or toolchain creates a different APK identity.",
-            "TEST_DEBUG_KEY builds are for testing only and are not the approved distribution identity.",
+            "TEST_DEBUG_KEY and DEV_KEY (public) builds are for development only and are not an approved distribution identity.",
             "Reproducibility was compared on one runner; other machines may differ.",
         ],
     }

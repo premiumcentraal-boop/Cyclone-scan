@@ -1,10 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
-// Must match the SDK version published by ../devicetrust (android/gradle.properties).
-val sdkVersion = "0.9.0-beta.1"
+// The SDK version published by ../devicetrust, read from android/gradle.properties so the
+// sample always builds against the AAR of the same checkout. A customer app pins a version.
+val sdkVersion: String = Properties().apply {
+    rootDir.resolve("../gradle.properties").inputStream().use { load(it) }
+}.getProperty("cyclone.version")
 
 android {
     namespace = "com.example.devicetrustsample"

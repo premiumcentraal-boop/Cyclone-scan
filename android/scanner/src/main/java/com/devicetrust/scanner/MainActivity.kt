@@ -70,7 +70,7 @@ class MainActivity : FragmentActivity() {
                 Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             ) {
                 when (tab) {
-                    0 -> ScanScreen(vm.scan, vm::runScan)
+                    0 -> ScanScreen(vm.scan, vm::runScan, vm::debugReport)
                     1 -> BiometricScreen(vm.biometricRunning, vm.biometricChecks) { vm.runBiometric(this@MainActivity) }
                     else -> ServerScreen(
                         vm.serverUrl, vm::updateServerUrl, vm.serverRunning, vm.serverSteps, vm.serverError,
@@ -81,6 +81,7 @@ class MainActivity : FragmentActivity() {
                         onVerifiedScan = { vm.runVerifiedScan(this@MainActivity) },
                         onRotateKeys = { vm.runKeyRotation(this@MainActivity) },
                         onShareLabRecord = { shareLabRecord(vm) },
+                        buildReport = vm::debugReport,
                     )
                 }
             }

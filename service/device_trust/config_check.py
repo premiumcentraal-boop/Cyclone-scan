@@ -17,6 +17,8 @@ from .policy import TrustPolicy
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 BETA_FLAGS = ("require_principal", "require_bound_enrollment", "require_bound_device")
 _PLACEHOLDER_DIGEST = "0" * 64
+# The committed PUBLIC development signing certificate (android/signing/dev-signer.sha256).
+DEV_SIGNER_SHA256 = "412b9e05c1418d4e5e1e0f86ee21687569b4623231f951e5cf6a8e67cc469416"
 MIN_TOKEN_CHARS = 32
 
 
@@ -59,6 +61,9 @@ def check(policy_path: str, *, profile: str = "beta", gateway_token_file: str | 
         on = getattr(policy, flag)
         out.append({"check": flag, "status": PASS if on else (FAIL if beta else WARN),
                     "detail": "enabled" if on else "disabled (recommended true for beta)"})
+    if DEV_SIGNER_SHA256 in policy.signing_cert_sha256:
+        out.append({"check": "dev_signing_key", "status": FAIL if beta else WARN,
+                    "detail": "policy trusts the PUBLIC development key: anyone can sign an app with it"})
     if _PLACEHOLDER_DIGEST in policy.signing_cert_sha256:
         out.append({"check": "signing_cert_sha256", "status": FAIL,
                     "detail": "placeholder digest: set your app's signing certificate SHA-256"})

@@ -4,7 +4,8 @@
 
 Uses the Android SDK's ``apksigner verify --print-certs`` (signature verified, not just read).
 Exit 0: signed, every signer is allowed by ``signing_cert_sha256`` and (unless
---allow-debug) none is a debug key. Exit 1: mismatch or debug key. Exit 2: cannot verify.
+--allow-debug / --allow-dev) none is a debug key or the public development key
+(android/signing/dev-signer.sha256). Exit 1: mismatch or debug key. Exit 2: cannot verify.
 Play App Signing re-signs uploads: then the allowlist must hold the *Play* app-signing
 certificate, and this check applies to the APK Google distributes, not the upload.
 """
@@ -20,6 +21,15 @@ import subprocess
 from pathlib import Path
 
 DEBUG_DN = "C=US, O=Android, CN=Android Debug"
+DEV_SIGNER_FILE = Path(__file__).resolve().parents[2] / "android" / "signing" / "dev-signer.sha256"
+
+
+def dev_digests() -> set[str]:
+    """SHA-256 of the committed PUBLIC development signing certificate (empty if absent)."""
+    try:
+        return {DEV_SIGNER_FILE.read_text(encoding="utf-8").strip().lower()}
+    except OSError:
+        return set()
 _LINE = re.compile(r"^Signer #(\d+) certificate (DN|SHA-256 digest): (.+)$")
 
 
@@ -59,13 +69,17 @@ def signers(apk: str, apksigner: str | None = None) -> list[dict]:
     return parse_apksigner(proc.stdout)
 
 
-def evaluate(found: list[dict], allowed: set[str], allow_debug: bool = False) -> dict:
+def evaluate(found: list[dict], allowed: set[str], allow_debug: bool = False, allow_dev: bool = False,
+             dev: set[str] | None = None) -> dict:
+    dev = dev_digests() if dev is None else dev
     allowed_all = all(s["sha256"] in allowed for s in found)
     debug = any(s["debug_key"] for s in found)
-    return {"signers": found, "allowed_by_policy": allowed_all,
-            "identity": "TEST_DEBUG_KEY" if debug else "NON_DEBUG_KEY",
-            "ok": allowed_all and (allow_debug or not debug),
-            "note": "A non-debug key is not thereby the approved production identity; the owner confirms that."}
+    public_dev = any(s["sha256"] in dev for s in found)
+    identity = "TEST_DEBUG_KEY" if debug else "DEV_KEY" if public_dev else "OTHER_KEY"
+    return {"signers": found, "allowed_by_policy": allowed_all, "identity": identity,
+            "ok": allowed_all and (allow_debug or not debug) and (allow_dev or not public_dev),
+            "note": "DEV_KEY is a public key: it identifies dev builds, not who built them. OTHER_KEY is not "
+                    "thereby the approved production identity; the owner confirms that."}
 
 
 def _sha256(path: str) -> str:
@@ -82,11 +96,12 @@ def main(argv=None) -> int:
     p.add_argument("--policy", required=True)
     p.add_argument("--apksigner")
     p.add_argument("--allow-debug", action="store_true", help="accept a debug-signed test build")
+    p.add_argument("--allow-dev", action="store_true", help="accept the public development key (dev policy)")
     args = p.parse_args(argv)
     try:
         policy = json.loads(Path(args.policy).read_text(encoding="utf-8"))
         allowed = {str(d).replace(":", "").strip().lower() for d in policy.get("signing_cert_sha256", ())}
-        result = {"apk_sha256": _sha256(args.apk), **evaluate(signers(args.apk, args.apksigner), allowed, args.allow_debug)}
+        result = {"apk_sha256": _sha256(args.apk), **evaluate(signers(args.apk, args.apksigner), allowed, args.allow_debug, args.allow_dev)}
     except (OSError, ValueError) as exc:
         p.exit(2, f"{exc}\n")
     print(json.dumps(result, indent=2))

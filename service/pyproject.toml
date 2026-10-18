@@ -1,10 +1,11 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "device-trust-service"
-version = "0.9.0b1"
+version = "0.9.0.dev1"
+license = "Apache-2.0"
 description = "Customer-operated Android device trust verification: key attestation, Play Integrity, signed actions and scans"
 requires-python = ">=3.11"
 dependencies = [

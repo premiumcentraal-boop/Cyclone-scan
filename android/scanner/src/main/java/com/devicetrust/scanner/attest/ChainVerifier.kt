@@ -361,7 +361,10 @@ class ChainVerifier(
             JSONObject(json).getJSONObject("entries").keys().asSequence()
                 .map { it.lowercase().trimStart('0').ifEmpty { "0" } }.toSet()
 
-        fun fetchRevocations(timeoutMs: Int = 8000): Set<String>? = runCatching {
+        fun fetchRevocations(timeoutMs: Int = 8000): Set<String>? = fetchRevocationsResult(timeoutMs).getOrNull()
+
+        /** Run 31: like [fetchRevocations], but keeps the failure for the debug report. */
+        fun fetchRevocationsResult(timeoutMs: Int = 8000): Result<Set<String>> = runCatching {
             val conn = URL(GOOGLE_STATUS_URL).openConnection() as HttpURLConnection
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs
@@ -370,7 +373,7 @@ class ChainVerifier(
             } finally {
                 conn.disconnect()
             }
-        }.getOrNull()
+        }
 
         /** X509Certificate.getExtensionValue returns the DER OCTET STRING wrapper; unwrap it. */
         fun unwrapOctetString(der: ByteArray): ByteArray = Der.readSingle(der).asBytes()
