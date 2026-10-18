@@ -38,7 +38,10 @@ Install exactly that APK, from the CI artifact, on each test phone. A local rebu
 
 **Setup:**
 - Run the reference service (docs/DEPLOYMENT.md), or `device-trust serve --expose-reasons` on a lab laptop.
-- Put the candidate's package and its CI signer digest in the policy.
+  - A lab laptop cannot use `deploy/reference/policy.beta.json` without a gateway: that policy requires a principal, and `serve` refuses to start unless `--gateway-token-file` is given (`service/device_trust/cli.py`, lines 60–61). A phone cannot send gateway headers. Use a copy of `service/policy.example.json` (principal not required) for the lab.
+  - `serve` binds to `127.0.0.1` by default. Pass `--host` with the laptop's LAN address, or the phone cannot reach it.
+  - `serve` refreshes Google's revocation list at startup (`build_service`), so the laptop needs outbound HTTPS to `android.googleapis.com`.
+- Put the candidate's package and its CI signer digest in the policy: `package_name` is `com.devicetrust.scanner` and `signing_cert_sha256` is a JSON list holding the APK's signer SHA-256. Both example files still carry placeholders; `device-trust check-config` fails until they are replaced.
 - For the Play cases, use a Play-recognized build and a configured service account. Otherwise record Play as UNAVAILABLE.
 
 **Never collect:** IMEI, serial numbers, account data, credentials, OTPs or raw logs. Use one stable anonymous alias per phone, e.g. `pixel-a`.
@@ -52,6 +55,17 @@ For every case:
    - duration in milliseconds, and whether anything crashed
 3. Compare with the expectation below. Only then set `expectation_met`; `operator_verified` is true only after review.
 4. Record with `python -m tools.assurance.lab record lab.json observation.json`. The schema is in `tools/assurance/lab.py`, with `origin` set to PHYSICAL (EMULATOR only for `emulator`) and the candidate's `revision`/`apk_sha256`.
+
+**Faster path (Run 30; needs a candidate built from Run 30 or later, because the 0.9.0-beta.1 candidate above has no lab-record button):**
+1. After steps 1–2 on the phone, open the Server tab and tap **Share lab record (JSON)**. Send it to your computer.
+2. On the computer, compare with the expectation, then run:
+   ```sh
+   python -m tools.assurance.lab_import record.json --candidate docs/validation/candidate.json \
+     --case clean_pixel --alias pixel-a --ground-truth CLEAN \
+     --expectation-met yes --operator-verified --lab docs/validation/lab.json
+   ```
+   The record supplies everything measured: verdict, score, hard failure, coverage, duration, evidence codes and the APK digest. You supply the case, alias, ground truth and outcome. A record from a different APK is refused.
+3. Run the lab server with `--expose-reasons`; the import needs the server's score and reasons. Use `--crashed` if the app crashed, and `--mode local` to record the local diagnostic instead of the server scan.
 
 | Case | Device / configuration | Expected (what "met" means) |
 |---|---|---|
