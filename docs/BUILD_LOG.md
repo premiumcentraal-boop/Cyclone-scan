@@ -16,7 +16,7 @@ Status vocabulary: PLANNED, IN_PROGRESS, IMPLEMENTED, CI_PASSED, DEVICE_VERIFIED
 | 19 beta validation | BLOCKED | 7b05048 → c48221b | PR #20; CI 38674872520 (green) | NOT EXECUTED: no device reachable | Runbook + beta checklist run: NO_GO (31 blockers) |
 | 28 review of 17–19 | CI_PASSED | 24b7a71 → ca9d6e7 | PR #21; CI 38759654224 | UNVERIFIED | Sprint "beta readiness without hardware"; 6 findings, 5 addressed |
 | 29 privacy and retention | CI_PASSED | f98ec72 → 305837f | PR #22; CI 38761296858 | not needed | Retention sweep, erasure, data inventory |
-| 30 phone-test readiness | CI_PASSED | df19d6d → dfed65a | PR #23; CI 38763660979 | not executed | Scanner lab record + import tool |
+| 30 phone-test readiness | CI_PASSED | df19d6d → aa1b0ce | PR #23; CI 38763660979 (dfed65a), 38764518718 (aa1b0ce, all green; APK artifact 11988116613) | not executed | Scanner lab record + import tool; see the 18 October handoff note |
 
 ### Run 14 — Report coverage and result accuracy
 - State: CI_PASSED (not DEVICE_VERIFIED; not merged)
@@ -211,3 +211,9 @@ All six delegated runs (14–19) exist and are green. Run 19's beta gate is NO_G
 - Runs 28–30 are CI_PASSED as stacked draft PRs #21 → #22 → #23 on #20. Nothing is merged or published.
 - Beta gate: unchanged at NO_GO. This sprint produced inputs for `protocol_review`, `integrated_claude_runs` (RUN_28_REVIEW.md) and `privacy_retention` (PRIVACY.md), but those approvals need human sign-off. The 22 phone-dependent blockers now have a faster recording path (Run 30); they still need a phone.
 - Owner decisions still open: test phone access, Google Cloud/Play setup, signing identity, licence, threshold review, merge order of PRs #1–#23 into `main`.
+
+### On-device handoff (18 October 2026)
+- Handoff for the phone session: [ON_DEVICE_HANDOFF.md](ON_DEVICE_HANDOFF.md). Evidence levels are stated per claim there.
+- Checked against the head `aa1b0ce`: CI run 38764518718 is green, including "Scanner lab record imports as a lab observation". Scanner APK artifact 11988116613. Lab-record local mode verified by hand only (not in CI). `lab.json` still has 0 observations, and the gate is still NO_GO.
+- Fixed (uncommitted): a missing scan now reports "has no local/server scan" (`lab_import.py`, new test); `HANDOFF.md` brought up to Run 30; Run 19 runbook names a lab-usable policy and the `--host` and revocation-list requirements.
+- Found, not fixed: `candidate.json` still points at the 7b05048 APK, which predates the lab-record button. A new candidate record needs the artifact hash, which this workspace cannot download.

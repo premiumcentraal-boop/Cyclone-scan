@@ -42,6 +42,9 @@ _EVIDENCE_KEYS = ("deviceKeySignature", "freshAttestation", "playIntegrity", "cl
 
 
 def _obj(value, name):
+    if value is None:
+        # A missing scan is the common operator error; say so instead of "must be an object".
+        raise ValueError(f"lab record has no {name}")
     if not isinstance(value, dict):
         raise ValueError(f"lab record: {name} must be an object")
     return value

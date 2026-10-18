@@ -38,7 +38,10 @@ Install exactly that APK, from the CI artifact, on each test phone. A local rebu
 
 **Setup:**
 - Run the reference service (docs/DEPLOYMENT.md), or `device-trust serve --expose-reasons` on a lab laptop.
-- Put the candidate's package and its CI signer digest in the policy.
+  - A lab laptop cannot use `deploy/reference/policy.beta.json` without a gateway: that policy requires a principal, and `serve` refuses to start unless `--gateway-token-file` is given (`service/device_trust/cli.py`, lines 60–61). A phone cannot send gateway headers. Use a copy of `service/policy.example.json` (principal not required) for the lab.
+  - `serve` binds to `127.0.0.1` by default. Pass `--host` with the laptop's LAN address, or the phone cannot reach it.
+  - `serve` refreshes Google's revocation list at startup (`build_service`), so the laptop needs outbound HTTPS to `android.googleapis.com`.
+- Put the candidate's package and its CI signer digest in the policy: `package_name` is `com.devicetrust.scanner` and `signing_cert_sha256` is a JSON list holding the APK's signer SHA-256. Both example files still carry placeholders; `device-trust check-config` fails until they are replaced.
 - For the Play cases, use a Play-recognized build and a configured service account. Otherwise record Play as UNAVAILABLE.
 
 **Never collect:** IMEI, serial numbers, account data, credentials, OTPs or raw logs. Use one stable anonymous alias per phone, e.g. `pixel-a`.

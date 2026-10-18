@@ -118,6 +118,13 @@ def test_auto_mode_falls_back_to_local_without_a_server_scan():
         build(record(server=None), mode="server")
 
 
+def test_missing_scan_is_reported_as_missing():
+    with pytest.raises(ValueError, match="has no local scan"):
+        build(record(local=None), mode="local")
+    with pytest.raises(ValueError, match="has no server scan"):
+        build(record(server=None), mode="server")
+
+
 def test_file_level_checks_and_cli(tmp_path):
     rec_path = tmp_path / "record.json"
     rec_path.write_text(json.dumps(record()))
