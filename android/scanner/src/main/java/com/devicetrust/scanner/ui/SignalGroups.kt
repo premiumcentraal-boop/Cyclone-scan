@@ -3,6 +3,7 @@ package com.devicetrust.scanner.ui
 import com.devicetrust.client.signals.NativeSignals
 import com.devicetrust.scanner.attest.Check
 import com.devicetrust.scanner.risk.LocalRisk
+import com.devicetrust.scanner.scan.NativeKotlinSummary
 import com.devicetrust.scanner.scan.ReportCoverage
 import com.devicetrust.scanner.scan.ReportState
 import org.json.JSONObject
@@ -108,15 +109,16 @@ fun signalGroups(
             "Native: " + native + " · Kotlin comparable snapshot: " + kotlin + " · " + comparison,
         )
     }
+    // A row that states the counts, not a label that reads like a disagreement when nothing disagrees.
+    val summary = NativeKotlinSummary.of(signals)
     groups.add(0, SignalGroup("Native versus Kotlin", nativeRows + SignalRow(
-        "Equivalent observations disagree",
-        when (signals.optString("native_kotlin_mismatch_status", "UNAVAILABLE")) {
-            "DETECTED" -> Check.Status.WARN
-            "NOT_DETECTED" -> Check.Status.PASS
+        "Native and Kotlin observations",
+        when {
+            summary.disagree > 0 || signals.optString("native_kotlin_mismatch_status") == "DETECTED" -> Check.Status.WARN
+            summary.matched > 0 -> Check.Status.PASS
             else -> Check.Status.UNVERIFIED
         },
-        signals.optString("native_kotlin_mismatch_status", "UNAVAILABLE") +
-            " · unavailable reads are not evidence of safety",
+        summary.detail() + " · unavailable reads are not evidence of safety",
     )))
     return groups
 }

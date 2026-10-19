@@ -1,0 +1,77 @@
+{
+  "schema": "cyclone-scan-debug-report",
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-18T21:51:33.628Z",
+  "purpose": "Results and debug export for developers: what was scanned, what was not, and why.",
+  "app": {
+    "packageName": "com.devicetrust.scanner",
+    "versionName": "0.9.0-dev.2",
+    "versionCode": 7,
+    "apkSha256": "1b93abd13976a7e03ce574e91fb7bdea663cf2d5bc0146772157b7f26af9f4d6",
+    "debuggable": false,
+    "installer": "com.google.android.packageinstaller"
+  },
+  "device": {
+    "manufacturer": "Google",
+    "brand": "google",
+    "model": "Pixel 8",
+    "device": "shiba",
+    "product": "shiba",
+    "sdkInt": 36,
+    "release": "16",
+    "securityPatch": "2026-05-05",
+    "supportedAbis": [
+      "arm64-v8a"
+    ],
+    "strongBoxFeature": true
+  },
+  "summary": {
+    "localScan": "NOT_RUN",
+    "serverScan": "UNAVAILABLE",
+    "biometricTest": "RAN",
+    "notScannedItems": 1
+  },
+  "notScanned": [
+    {
+      "kind": "server",
+      "id": "server_verified_scan",
+      "label": "Server-verified scan",
+      "state": "UNAVAILABLE",
+      "reason": "NOT_ENROLLED",
+      "explanation": "no server verdict",
+      "developerHint": "Check the server URL, that it listens on the network, and its logs for this time."
+    }
+  ],
+  "errors": [],
+  "phases": [],
+  "localScan": null,
+  "server": {
+    "lastVerifiedScan": {
+      "durationMs": 1,
+      "finishedAt": "2026-10-18T21:50:57.278Z",
+      "label": "UNAVAILABLE",
+      "unavailable": "NOT_ENROLLED"
+    },
+    "steps": [
+      {
+        "title": "Enrollment",
+        "decision": "BLOCK",
+        "reasons": [
+          "BOOTLOADER_UNLOCKED",
+          "BOOT_STATE_UNVERIFIED",
+          "RISK_BLOCK"
+        ]
+      }
+    ],
+    "error": null
+  },
+  "biometric": [
+    {
+      "id": "confirm_key",
+      "label": "Biometric-bound key created",
+      "status": "FAIL",
+      "detail": "no strong biometric enrolled or no screen lock set"
+    }
+  ],
+  "privacy": "No serial number, IMEI, account data, server address, tokens or file paths. Error messages are sanitized. Includes the device model, OS\/patch facts, the app's own signer digest and check states."
+}

@@ -9,6 +9,15 @@ fun interface SignalCollector {
 }
 
 /**
+ * Hook frameworks (Frida, Xposed/LSPosed, Zygisk) inject only into the processes they target.
+ * The scanner reads its own process, so "not found here" says nothing about the rest of the
+ * phone. That result is reported as partial coverage, never as a clean check. A detection is
+ * still a detection.
+ */
+internal fun scopedToThisProcess(result: CheckResult): CheckResult =
+    if (result.state == CheckState.NOT_DETECTED) CheckResult.unavailable(CheckReason.SCOPE_LIMITED) else result
+
+/**
  * Client-side RASP checks. Every check is best-effort and isolated: a failing
  * check never crashes collection. Since Run 14 each check also reports a
  * typed `<key>_status` (DETECTED / NOT_DETECTED / UNAVAILABLE / UNSUPPORTED)
@@ -71,14 +80,14 @@ class DeviceSignals(private val probe: SignalProbe, private val nativeProbe: Nat
         flag("root_test_keys", buildCheck { it.tags.contains("test-keys") })
         flag("root_system_rw", textCheck("/proc/mounts", ::systemMountedRw))
         // hooking
-        flag("hook_frida", mapsCheck { m -> "frida" in m || "gum-js-loop" in m || "gadget" in m })
+        flag("hook_frida", scopedToThisProcess(mapsCheck { m -> "frida" in m || "gum-js-loop" in m || "gadget" in m }))
         flag("hook_frida_port", CheckResult.anyOf(FRIDA_PORTS.map { observe { probe.canConnectLoopback(it) } }))
-        flag("hook_xposed", CheckResult.anyOf(
+        flag("hook_xposed", scopedToThisProcess(CheckResult.anyOf(
             listOf(mapsCheck { m -> XPOSED_MAP_TOKENS.any { it in m } }) +
                 XPOSED_CLASSES.map { observe { probe.classExists(it) } } +
                 observe { probe.currentStackTrace().any { frame -> XPOSED_STACK_TOKENS.any { it in frame } } },
-        ))
-        flag("hook_zygisk", mapsCheck { "zygisk" in it })
+        )))
+        flag("hook_zygisk", scopedToThisProcess(mapsCheck { "zygisk" in it }))
         // debugging
         flag("debug_attached", observe { probe.isDebuggerConnected() })
         flag("debug_traced", tracer())

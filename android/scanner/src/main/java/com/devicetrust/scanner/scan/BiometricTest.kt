@@ -2,6 +2,7 @@ package com.devicetrust.scanner.scan
 
 import androidx.fragment.app.FragmentActivity
 import com.devicetrust.client.AndroidKeyAttester
+import com.devicetrust.client.BiometricPrecondition
 import com.devicetrust.client.BiometricPromptAuthenticator
 import com.devicetrust.scanner.attest.AUTH_BIOMETRIC
 import com.devicetrust.scanner.attest.AUTH_PASSWORD
@@ -31,7 +32,7 @@ class BiometricTest(private val activity: FragmentActivity) {
             val key = withContext(Dispatchers.Default) { attester.generateConfirmKey(alias, challenge) }
             if (key == null) {
                 checks += Check("confirm_key", "Biometric-bound key created", Check.Status.FAIL,
-                    "no strong biometric enrolled or no screen lock set")
+                    BiometricPrecondition.explain(activity))
                 return checks
             }
             checks += Check("confirm_key", "Biometric-bound key created", Check.Status.PASS,

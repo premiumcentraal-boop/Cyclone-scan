@@ -99,11 +99,15 @@ object ReportCoverage {
     fun reasonText(reason: String?): String = when (reason) {
         "ACCESS_DENIED" -> "Android did not allow this app to read it (normal under app sandboxing)"
         "PARTIAL_COVERAGE" -> "only some sources could be read"
+        "SCOPE_LIMITED" -> "only this app's own process could be checked; hook frameworks inject only into the apps they target, so absence here proves nothing about the rest of the phone"
         "READ_ERROR" -> "the information could not be read"
         "MALFORMED" -> "the information was in an unexpected format"
         "TOO_LARGE" -> "the information was larger than the safe read limit"
         "API_ERROR" -> "the Android query failed"
         "API_UNSUPPORTED" -> "not supported on this Android version"
+        // The native collector sends no reason for some checks. Its code is outside this app's
+        // Kotlin layer, so the gap is tracked for the Run 27 native review instead.
+        null -> "the native check returned no reason (tracked for the Run 27 native review)"
         else -> "no reason reported"
     }
 
@@ -150,7 +154,12 @@ object ReportCoverage {
         }
         val revocation = Layer("revocation_list", "Google revocation list", EvidenceSource.HARDWARE_ATTESTED,
             if (attestation.revocationChecked) LayerState.VERIFIED else LayerState.UNAVAILABLE,
-            if (attestation.revocationChecked) "downloaded and checked" else "could not be downloaded, so revocation is not established")
+            when {
+                attestation.revocationSource == "CACHED" ->
+                    "live download failed; checked against a copy saved within the last 24 hours"
+                attestation.revocationChecked -> "downloaded and checked"
+                else -> "could not be downloaded, so revocation is not established"
+            })
         fun checksLayer(id: String, label: String, source: EvidenceSource): Layer {
             val c = counts(findings, source)
             val state = when {

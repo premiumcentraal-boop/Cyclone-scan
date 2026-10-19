@@ -40,7 +40,7 @@ class ScannerViewModel(app: Application) : AndroidViewModel(app) {
     var biometricRunning by mutableStateOf(false)
         private set
     val biometricChecks = mutableStateListOf<Check>()
-    var serverUrl by mutableStateOf(prefs.getString("server_url", "http://192.168.1.10:8080").orEmpty())
+    var serverUrl by mutableStateOf(ServerUrl.fromStored(prefs.getString("server_url", null)))
         private set
     var serverRunning by mutableStateOf(false)
         private set
