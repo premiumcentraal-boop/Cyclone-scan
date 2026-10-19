@@ -225,13 +225,24 @@ class DeviceSignalsTest {
         assertCoherent(report)
     }
 
+    /**
+     * Hook frameworks inject only into the processes they target, so the scanner's own process
+     * cannot show that they are absent. On a clean phone these are SCOPE_LIMITED, never COMPLETED.
+     */
+    private val scopedHookKeys = listOf("hook_frida", "hook_xposed", "hook_zygisk")
+
     @Test
     fun cleanPhoneCompletesEveryCheck() {
         val report = collect()
         assertEquals(DeviceSignals.COVERAGE_VERSION, report.getInt("signal_coverage_version"))
-        (boolKeys + listOf("env_a11y_third_party", "env_remote_access_apps")).forEach {
+        (boolKeys - scopedHookKeys.toSet() + listOf("env_a11y_third_party", "env_remote_access_apps")).forEach {
             assertEquals(it, "NOT_DETECTED", report.getString(it + "_status"))
             assertEquals(it, "COMPLETED", report.getString(it + "_reason"))
+        }
+        scopedHookKeys.forEach {
+            assertEquals(it, "UNAVAILABLE", report.getString(it + "_status"))
+            assertEquals(it, "SCOPE_LIMITED", report.getString(it + "_reason"))
+            assertFalse(it, report.getBoolean(it))
         }
         listOf("app_installer", "app_signature_sha256", "os_security_patch", "os_release").forEach {
             assertEquals(it, "COLLECTED", report.getString(it + "_status"))

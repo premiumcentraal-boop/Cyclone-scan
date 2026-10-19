@@ -43,8 +43,8 @@ class AttestationReport(
 class ChainVerifier(
     private val trustedRootKeys: List<ByteArray>,
     private val revokedSerials: Set<String>?,
-    private val clock: () -> Date = ::Date,
     private val revocationSource: String = if (revokedSerials != null) "LIVE" else "NONE",
+    private val clock: () -> Date = ::Date,
 ) {
     fun verify(
         chainDer: List<ByteArray>,

@@ -1,0 +1,720 @@
+{
+  "schema": "cyclone-scan-debug-report",
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-18T21:41:07.592Z",
+  "purpose": "Results and debug export for developers: what was scanned, what was not, and why.",
+  "app": {
+    "packageName": "com.devicetrust.scanner",
+    "versionName": "0.9.0-dev.2",
+    "versionCode": 7,
+    "apkSha256": "1b93abd13976a7e03ce574e91fb7bdea663cf2d5bc0146772157b7f26af9f4d6",
+    "debuggable": false,
+    "installer": "com.google.android.packageinstaller"
+  },
+  "device": {
+    "manufacturer": "Google",
+    "brand": "google",
+    "model": "Pixel 8",
+    "device": "shiba",
+    "product": "shiba",
+    "sdkInt": 36,
+    "release": "16",
+    "securityPatch": "2026-05-05",
+    "supportedAbis": [
+      "arm64-v8a"
+    ],
+    "strongBoxFeature": true
+  },
+  "summary": {
+    "localScan": "COMPLETED",
+    "verdict": "BLOCK",
+    "score": 100,
+    "checksTotal": 31,
+    "checksCompleted": 30,
+    "checksDetected": 9,
+    "checksNotScanned": 1,
+    "hardFailures": [
+      "bootloader",
+      "verified_boot"
+    ],
+    "durationMs": 2533,
+    "serverScan": "NOT_RUN",
+    "biometricTest": "NOT_RUN",
+    "notScannedItems": 6
+  },
+  "notScanned": [
+    {
+      "kind": "check",
+      "id": "native_selinux_permissive",
+      "label": "SELinux enforcement disabled (native)",
+      "state": "UNAVAILABLE",
+      "reason": null,
+      "explanation": "could not verify: no reason reported",
+      "developerHint": "The native check could not read its source inside this process.",
+      "source": "LOCAL_NATIVE"
+    },
+    {
+      "kind": "layer",
+      "id": "native_checks",
+      "label": "On-phone checks (native)",
+      "state": "PARTIAL",
+      "reason": null,
+      "explanation": "8 of 9 completed · 1 could not be verified · 0 unsupported",
+      "developerHint": "Some checks in this layer did not complete; see the check items above.",
+      "source": "LOCAL_NATIVE"
+    },
+    {
+      "kind": "layer",
+      "id": "play_integrity",
+      "label": "Google Play Integrity",
+      "state": "NOT_EVALUATED",
+      "reason": null,
+      "explanation": "requires the verification server; not run in local mode",
+      "developerHint": "Needs the verification server; run the Server tab against a server to cover it.",
+      "source": "SERVER"
+    },
+    {
+      "kind": "layer",
+      "id": "server_policy",
+      "label": "Server policy decision",
+      "state": "NOT_EVALUATED",
+      "reason": null,
+      "explanation": "requires the verification server; not run in local mode",
+      "developerHint": "Needs the verification server; run the Server tab against a server to cover it.",
+      "source": "SERVER"
+    },
+    {
+      "kind": "layer",
+      "id": "fleet_history",
+      "label": "Device and fleet history",
+      "state": "NOT_EVALUATED",
+      "reason": null,
+      "explanation": "requires the verification server; not run in local mode",
+      "developerHint": "Needs the verification server; run the Server tab against a server to cover it.",
+      "source": "SERVER"
+    },
+    {
+      "kind": "layer",
+      "id": "official_signer",
+      "label": "Official scanner signer",
+      "state": "NOT_EVALUATED",
+      "reason": null,
+      "explanation": "the app compares its signer only with its own attestation; that is not independent verification",
+      "developerHint": "Needs the verification server; run the Server tab against a server to cover it.",
+      "source": "SERVER"
+    }
+  ],
+  "errors": [],
+  "phases": [
+    {
+      "phase": "load_attestation_roots",
+      "outcome": "OK",
+      "durationMs": 2,
+      "detail": null,
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "phase": "revocation_list",
+      "outcome": "OK",
+      "durationMs": 2231,
+      "detail": "1763 entries",
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "phase": "hardware_key_generation",
+      "outcome": "OK",
+      "durationMs": 220,
+      "detail": null,
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "phase": "attestation_verification",
+      "outcome": "OK",
+      "durationMs": 4,
+      "detail": null,
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "phase": "device_signals",
+      "outcome": "OK",
+      "durationMs": 73,
+      "detail": null,
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "phase": "native_collector",
+      "outcome": "OK",
+      "durationMs": 0,
+      "detail": null,
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "phase": "risk_scoring",
+      "outcome": "OK",
+      "durationMs": 1,
+      "detail": null,
+      "errorType": null,
+      "errorMessage": null
+    }
+  ],
+  "localScan": {
+    "reportSchema": "cyclone-scan-report",
+    "reportSchemaVersion": 2,
+    "scanner": "device-trust-scanner\/0.9.0-dev.2",
+    "evaluationMode": "LOCAL_DIAGNOSTIC",
+    "playIntegrityEvaluated": false,
+    "fleetEvaluated": false,
+    "officialSignerVerified": false,
+    "scannedAt": 1792359647174,
+    "verdict": "BLOCK",
+    "score": 100,
+    "factors": [
+      {
+        "factor": "root_magisk",
+        "points": 50
+      },
+      {
+        "factor": "root_su",
+        "points": 40
+      },
+      {
+        "factor": "app_installer_untrusted",
+        "points": 30
+      },
+      {
+        "factor": "root_apps",
+        "points": 25
+      },
+      {
+        "factor": "env_remote_access_apps",
+        "points": 15
+      },
+      {
+        "factor": "env_a11y_third_party",
+        "points": 10
+      },
+      {
+        "factor": "env_adb",
+        "points": 10
+      },
+      {
+        "factor": "env_dev_options",
+        "points": 5
+      },
+      {
+        "factor": "env_vpn",
+        "points": 5
+      }
+    ],
+    "device": {
+      "brand": "google",
+      "model": "Pixel 8",
+      "manufacturer": "Google",
+      "device": "shiba",
+      "product": "shiba"
+    },
+    "attestation": {
+      "chainLength": 5,
+      "root": "Key Attestation CA1",
+      "revocationChecked": true,
+      "strongBoxKey": true,
+      "attestationVersion": 300,
+      "securityLevel": "STRONG_BOX",
+      "keyMintSecurityLevel": "STRONG_BOX",
+      "osPatchLevel": 202605,
+      "vendorPatchLevel": 20260505,
+      "bootState": "UNVERIFIED",
+      "chainType": "RKP",
+      "osVersion": 160000,
+      "bootPatchLevel": 20260505,
+      "deviceLocked": false,
+      "attestedIds": {
+        "brand": "google",
+        "device": "shiba",
+        "product": "shiba",
+        "manufacturer": "Google",
+        "model": "Pixel 8"
+      },
+      "checks": [
+        {
+          "id": "chain_parse",
+          "status": "PASS",
+          "detail": "5 certificates"
+        },
+        {
+          "id": "ext_leaf_only",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "provisioning_info",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "chain_signatures",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "google_root",
+          "status": "PASS",
+          "detail": "Key Attestation CA1"
+        },
+        {
+          "id": "validity",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "revocation",
+          "status": "PASS",
+          "detail": "1763 revoked entries checked"
+        },
+        {
+          "id": "challenge",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "security_level",
+          "status": "PASS",
+          "detail": "StrongBox"
+        },
+        {
+          "id": "strongbox",
+          "status": "PASS",
+          "detail": "dedicated security chip"
+        },
+        {
+          "id": "bootloader",
+          "status": "FAIL",
+          "detail": "UNLOCKED"
+        },
+        {
+          "id": "verified_boot",
+          "status": "FAIL",
+          "detail": "UNVERIFIED"
+        },
+        {
+          "id": "key_origin",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "app_identity",
+          "status": "PASS",
+          "detail": "com.devicetrust.scanner"
+        },
+        {
+          "id": "patch",
+          "status": "PASS",
+          "detail": "2026-05 (5 months old)"
+        },
+        {
+          "id": "device_ids",
+          "status": "PASS",
+          "detail": "Google Pixel 8"
+        },
+        {
+          "id": "security_chain",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "id": "provenance",
+          "status": "PASS",
+          "detail": "short-lived per-device key from Google's Remote Key Provisioning"
+        }
+      ]
+    },
+    "signals": {
+      "v": 1,
+      "signal_coverage_version": 1,
+      "root_su": true,
+      "root_su_status": "DETECTED",
+      "root_su_reason": "COMPLETED",
+      "root_magisk": true,
+      "root_magisk_status": "DETECTED",
+      "root_magisk_reason": "COMPLETED",
+      "root_apps": true,
+      "root_apps_status": "DETECTED",
+      "root_apps_reason": "COMPLETED",
+      "root_test_keys": false,
+      "root_test_keys_status": "NOT_DETECTED",
+      "root_test_keys_reason": "COMPLETED",
+      "root_system_rw": false,
+      "root_system_rw_status": "NOT_DETECTED",
+      "root_system_rw_reason": "COMPLETED",
+      "hook_frida": false,
+      "hook_frida_status": "NOT_DETECTED",
+      "hook_frida_reason": "COMPLETED",
+      "hook_frida_port": false,
+      "hook_frida_port_status": "NOT_DETECTED",
+      "hook_frida_port_reason": "COMPLETED",
+      "hook_xposed": false,
+      "hook_xposed_status": "NOT_DETECTED",
+      "hook_xposed_reason": "COMPLETED",
+      "hook_zygisk": false,
+      "hook_zygisk_status": "NOT_DETECTED",
+      "hook_zygisk_reason": "COMPLETED",
+      "debug_attached": false,
+      "debug_attached_status": "NOT_DETECTED",
+      "debug_attached_reason": "COMPLETED",
+      "debug_traced": false,
+      "debug_traced_status": "NOT_DETECTED",
+      "debug_traced_reason": "COMPLETED",
+      "debug_app_debuggable": false,
+      "debug_app_debuggable_status": "NOT_DETECTED",
+      "debug_app_debuggable_reason": "COMPLETED",
+      "emu_build": false,
+      "emu_build_status": "NOT_DETECTED",
+      "emu_build_reason": "COMPLETED",
+      "emu_files": false,
+      "emu_files_status": "NOT_DETECTED",
+      "emu_files_reason": "COMPLETED",
+      "app_installer": "com.google.android.packageinstaller",
+      "app_installer_status": "COLLECTED",
+      "app_installer_reason": "COMPLETED",
+      "app_signature_sha256": "412b9e05c1418d4e5e1e0f86ee21687569b4623231f951e5cf6a8e67cc469416",
+      "app_signature_sha256_status": "COLLECTED",
+      "app_signature_sha256_reason": "COMPLETED",
+      "os_security_patch": "2026-05-05",
+      "os_security_patch_status": "COLLECTED",
+      "os_security_patch_reason": "COMPLETED",
+      "os_release": "16",
+      "os_release_status": "COLLECTED",
+      "os_release_reason": "COMPLETED",
+      "env_dev_options": true,
+      "env_dev_options_status": "DETECTED",
+      "env_dev_options_reason": "COMPLETED",
+      "env_adb": true,
+      "env_adb_status": "DETECTED",
+      "env_adb_reason": "COMPLETED",
+      "env_vpn": true,
+      "env_vpn_status": "DETECTED",
+      "env_vpn_reason": "COMPLETED",
+      "env_in_call": false,
+      "env_in_call_status": "NOT_DETECTED",
+      "env_in_call_reason": "COMPLETED",
+      "env_external_display": false,
+      "env_external_display_status": "NOT_DETECTED",
+      "env_external_display_reason": "COMPLETED",
+      "env_a11y_third_party": 4,
+      "env_a11y_third_party_status": "DETECTED",
+      "env_a11y_third_party_reason": "COMPLETED",
+      "env_remote_access_a11y": false,
+      "env_remote_access_a11y_status": "NOT_DETECTED",
+      "env_remote_access_a11y_reason": "COMPLETED",
+      "env_remote_access_apps": [
+        "anydesk"
+      ],
+      "env_remote_access_apps_status": "DETECTED",
+      "env_remote_access_apps_reason": "COMPLETED",
+      "native_root_su": false,
+      "native_root_su_status": "NOT_DETECTED",
+      "native_root_su_comparison": "UNAVAILABLE",
+      "kotlin_root_su_comparison_status": "UNAVAILABLE",
+      "native_root_magisk": true,
+      "native_root_magisk_status": "DETECTED",
+      "native_root_magisk_comparison": "UNAVAILABLE",
+      "kotlin_root_magisk_comparison_status": "UNAVAILABLE",
+      "native_root_system_rw": false,
+      "native_root_system_rw_status": "NOT_DETECTED",
+      "native_root_system_rw_comparison": "UNAVAILABLE",
+      "kotlin_root_system_rw_comparison_status": "UNAVAILABLE",
+      "native_hook_frida": false,
+      "native_hook_frida_status": "NOT_DETECTED",
+      "native_hook_frida_comparison": "UNAVAILABLE",
+      "kotlin_hook_frida_comparison_status": "UNAVAILABLE",
+      "native_hook_xposed": false,
+      "native_hook_xposed_status": "NOT_DETECTED",
+      "native_hook_xposed_comparison": "UNAVAILABLE",
+      "kotlin_hook_xposed_comparison_status": "UNAVAILABLE",
+      "native_hook_zygisk": false,
+      "native_hook_zygisk_status": "NOT_DETECTED",
+      "native_hook_zygisk_comparison": "UNAVAILABLE",
+      "kotlin_hook_zygisk_comparison_status": "UNAVAILABLE",
+      "native_debug_traced": false,
+      "native_debug_traced_status": "NOT_DETECTED",
+      "native_debug_traced_comparison": "MATCH",
+      "kotlin_debug_traced_comparison_status": "NOT_DETECTED",
+      "native_selinux_permissive": false,
+      "native_selinux_permissive_status": "UNAVAILABLE",
+      "native_selinux_permissive_comparison": "UNAVAILABLE",
+      "kotlin_selinux_permissive_comparison_status": "UNAVAILABLE",
+      "native_code_modified": false,
+      "native_code_modified_status": "NOT_DETECTED",
+      "native_code_modified_comparison": "UNAVAILABLE",
+      "kotlin_code_modified_comparison_status": "UNAVAILABLE",
+      "native_kotlin_mismatch": false,
+      "native_kotlin_mismatch_status": "NOT_DETECTED",
+      "native_collector_version": "2"
+    },
+    "coverage": {
+      "local": {
+        "detected": 8,
+        "notDetected": 14,
+        "unavailable": 0,
+        "unsupported": 0,
+        "unreported": 0
+      },
+      "native": {
+        "detected": 1,
+        "notDetected": 7,
+        "unavailable": 1,
+        "unsupported": 0,
+        "unreported": 0
+      }
+    },
+    "findings": [
+      {
+        "id": "root_su",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "root_magisk",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "root_apps",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "root_test_keys",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "root_system_rw",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "hook_frida",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "hook_frida_port",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "hook_xposed",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "hook_zygisk",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "debug_attached",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "debug_traced",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "debug_app_debuggable",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "emu_build",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "emu_files",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_dev_options",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_adb",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_vpn",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_in_call",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_external_display",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_remote_access_a11y",
+        "source": "LOCAL_CHECK",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_a11y_third_party",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "env_remote_access_apps",
+        "source": "LOCAL_CHECK",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_root_su",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_root_magisk",
+        "source": "LOCAL_NATIVE",
+        "state": "DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_root_system_rw",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_hook_frida",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_hook_xposed",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_hook_zygisk",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_debug_traced",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      },
+      {
+        "id": "native_selinux_permissive",
+        "source": "LOCAL_NATIVE",
+        "state": "UNAVAILABLE",
+        "reason": null
+      },
+      {
+        "id": "native_code_modified",
+        "source": "LOCAL_NATIVE",
+        "state": "NOT_DETECTED",
+        "reason": null
+      }
+    ],
+    "verification": [
+      {
+        "id": "hardware_attestation",
+        "source": "HARDWARE_ATTESTED",
+        "state": "FAILED",
+        "detail": "2 hard check(s) failed or could not be established"
+      },
+      {
+        "id": "revocation_list",
+        "source": "HARDWARE_ATTESTED",
+        "state": "VERIFIED",
+        "detail": "downloaded and checked"
+      },
+      {
+        "id": "local_checks",
+        "source": "LOCAL_CHECK",
+        "state": "COMPLETE",
+        "detail": "22 of 22 completed · 0 could not be verified · 0 unsupported"
+      },
+      {
+        "id": "native_checks",
+        "source": "LOCAL_NATIVE",
+        "state": "PARTIAL",
+        "detail": "8 of 9 completed · 1 could not be verified · 0 unsupported"
+      },
+      {
+        "id": "play_integrity",
+        "source": "SERVER",
+        "state": "NOT_EVALUATED",
+        "detail": "requires the verification server; not run in local mode"
+      },
+      {
+        "id": "server_policy",
+        "source": "SERVER",
+        "state": "NOT_EVALUATED",
+        "detail": "requires the verification server; not run in local mode"
+      },
+      {
+        "id": "fleet_history",
+        "source": "SERVER",
+        "state": "NOT_EVALUATED",
+        "detail": "requires the verification server; not run in local mode"
+      },
+      {
+        "id": "official_signer",
+        "source": "SERVER",
+        "state": "NOT_EVALUATED",
+        "detail": "the app compares its signer only with its own attestation; that is not independent verification"
+      }
+    ],
+    "exportNotice": "Local diagnostic only. UNAVAILABLE or UNSUPPORTED checks were not verified and are not evidence of safety. Play Integrity, server policy, fleet history and official signer verification were not evaluated. Contains device model, attested OS\/patch facts and check states; no serial, IMEI, account data, file paths or secrets.",
+    "durationMs": 2533
+  },
+  "server": null,
+  "biometric": null,
+  "privacy": "No serial number, IMEI, account data, server address, tokens or file paths. Error messages are sanitized. Includes the device model, OS\/patch facts, the app's own signer digest and check states."
+}
