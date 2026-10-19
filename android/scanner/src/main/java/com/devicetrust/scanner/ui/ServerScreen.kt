@@ -65,6 +65,7 @@ fun ServerScreen(
                 value = url,
                 onValueChange = onUrl,
                 label = { Text("Server URL") },
+                placeholder = { Text("http://<computer-ip>:8080") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),

@@ -1,6 +1,7 @@
 """Run 18: signer allowlist check and build evidence (offline; apksigner faked)."""
 
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -18,6 +19,13 @@ Signer #1 certificate SHA-256 digest: AB""" + "ab" * 31 + "\n"
 
 
 def fake_apksigner(tmp_path, output, code=0):
+    if os.name == "nt":
+        # Windows runs a .cmd file, not a shell script: print the saved output, then exit with the code.
+        out_file = tmp_path / "apksigner-output.txt"
+        out_file.write_text(output, encoding="utf-8")
+        script = tmp_path / "apksigner.cmd"
+        script.write_text(f'@echo off\r\ntype "{out_file}"\r\nexit /b {code}\r\n', encoding="utf-8")
+        return str(script)
     script = tmp_path / "apksigner"
     script.write_text(f"#!/bin/sh\ncat <<'X'\n{output}X\nexit {code}\n")
     script.chmod(script.stat().st_mode | stat.S_IEXEC)

@@ -6,6 +6,9 @@ import com.devicetrust.client.DeviceInfo
 import com.devicetrust.scanner.attest.AttestationReport
 import com.devicetrust.scanner.attest.ChainVerifier
 import com.devicetrust.scanner.attest.Check
+import com.devicetrust.scanner.attest.RevocationResolution
+import com.devicetrust.scanner.attest.RevocationResolver
+import com.devicetrust.scanner.attest.RevocationSource
 import com.devicetrust.scanner.risk.LocalRisk
 import com.devicetrust.client.signals.AndroidSignalProbe
 import com.devicetrust.client.signals.DeviceSignals
@@ -17,6 +20,13 @@ import java.util.Date
 import java.util.UUID
 
 enum class Verdict { ALLOW, STEP_UP, BLOCK }
+
+/** The phase detail for the revocation list, saying plainly when the copy is not live. */
+internal fun revocationDetail(r: RevocationResolution): String = when (r.source) {
+    RevocationSource.LIVE -> "${r.serials?.size ?: 0} entries"
+    RevocationSource.CACHED -> "live download failed; using the copy saved ${(r.cachedAgeMs ?: 0L) / 60_000} min ago"
+    RevocationSource.NONE -> "revocation not established"
+}
 
 /** Result of one local scan. Contains no serial, IMEI or account data. */
 class ScanResult(
@@ -68,6 +78,7 @@ class ScanResult(
             put("chainLength", attestation.chainLength)
             put("root", attestation.rootSubject)
             put("revocationChecked", attestation.revocationChecked)
+            put("revocationSource", attestation.revocationSource)
             put("strongBoxKey", strongBoxKey)
             attestation.keyDescription?.let { kd ->
                 put("attestationVersion", kd.attestationVersion)
@@ -136,12 +147,17 @@ class Scanner(private val context: Context) {
             )
         }
         val revocationStart = System.currentTimeMillis()
-        val revocations = ChainVerifier.fetchRevocationsResult()
-        trace.record("revocation_list", if (revocations.isSuccess) ScanTrace.Outcome.OK else ScanTrace.Outcome.FAILED,
+        // A transient failure is retried; a live list is saved, and a recent saved copy is used
+        // (labelled as cached) only when every live attempt fails.
+        val live = RevocationResolver.withRetry { ChainVerifier.fetchRevocationsResult().getOrThrow() }
+        val cache = RevocationCache(context)
+        val resolved = RevocationResolver.resolve(live, cache.load(), System.currentTimeMillis())
+        if (resolved.source == RevocationSource.LIVE) cache.save(resolved.serials.orEmpty(), System.currentTimeMillis())
+        trace.record("revocation_list", if (resolved.serials != null) ScanTrace.Outcome.OK else ScanTrace.Outcome.FAILED,
             System.currentTimeMillis() - revocationStart,
-            if (revocations.isSuccess) "${revocations.getOrNull()?.size} entries" else "revocation not established",
-            revocations.exceptionOrNull())
-        val revoked = revocations.getOrNull()
+            revocationDetail(resolved),
+            resolved.liveError)
+        val revoked = resolved.serials
         val challenge = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val alias = "scanner_probe_" + UUID.randomUUID()
         val device = DeviceInfo.current()
@@ -161,7 +177,7 @@ class Scanner(private val context: Context) {
                     null, 0, null, revoked != null,
                 )
             } else {
-                ChainVerifier(roots, revoked).verify(
+                ChainVerifier(roots, revoked, revocationSource = resolved.source.name).verify(
                     key.chain, challenge, context.packageName,
                     mapOf(
                         "brand" to device.brand, "device" to device.device, "product" to device.product,

@@ -28,6 +28,8 @@ class AttestationReport(
     val revocationChecked: Boolean,
     /** "RKP", "FACTORY", "UNRECOGNIZED" or null when the chain could not be verified. */
     val chainType: String? = null,
+    /** "LIVE", "CACHED" or "NONE": where the revocation list used for [revocationChecked] came from. */
+    val revocationSource: String = "NONE",
 ) {
     val hardFailures: List<Check> get() = checks.filter { it.status == Check.Status.FAIL }
 }
@@ -42,6 +44,7 @@ class ChainVerifier(
     private val trustedRootKeys: List<ByteArray>,
     private val revokedSerials: Set<String>?,
     private val clock: () -> Date = ::Date,
+    private val revocationSource: String = if (revokedSerials != null) "LIVE" else "NONE",
 ) {
     fun verify(
         chainDer: List<ByteArray>,
@@ -131,7 +134,8 @@ class ChainVerifier(
             KeyDescriptionParser.parse(unwrapOctetString(certs[0].getExtensionValue(KEY_DESCRIPTION_OID)!!))
         } catch (e: Exception) {
             checks += Check("ext_parse", "Attestation data well-formed", Check.Status.FAIL, e.message.orEmpty())
-            return AttestationReport(checks, null, certs.size, shortName(root), revokedSerials != null)
+            return AttestationReport(checks, null, certs.size, shortName(root), revokedSerials != null,
+                revocationSource = revocationSource)
         }
         contentChecks(kd, expectedChallenge, expectedPackage, reportedIds, maxPatchAgeMonths, now, checks)
         if (chainType == CHAIN_RKP || chainType == CHAIN_FACTORY) {
@@ -153,7 +157,8 @@ class ChainVerifier(
                 else -> "unknown"
             },
         )
-        return AttestationReport(checks, kd, certs.size, shortName(root), revokedSerials != null, chainType)
+        return AttestationReport(checks, kd, certs.size, shortName(root), revokedSerials != null, chainType,
+            revocationSource = revocationSource)
     }
 
     private fun contentChecks(

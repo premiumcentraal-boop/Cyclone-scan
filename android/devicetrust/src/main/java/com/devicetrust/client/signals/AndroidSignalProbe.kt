@@ -105,8 +105,8 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
         0
     }
 
-    override fun enabledAccessibilityServices(): List<AccessibilityServiceRef> =
-        app.getSystemService(AccessibilityManager::class.java)
+    override fun enabledAccessibilityServices(): List<AccessibilityServiceRef> {
+        val fromManager = app.getSystemService(AccessibilityManager::class.java)
             .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
             .mapNotNull { info ->
                 val service = info.resolveInfo?.serviceInfo ?: return@mapNotNull null
@@ -116,6 +116,23 @@ class AndroidSignalProbe(context: Context) : SignalProbe {
                     isSystemApp = flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0,
                 )
             }
+        // The same services from the secure setting, for any the manager list did not return.
+        val secure = runCatching {
+            Settings.Secure.getString(app.contentResolver, "enabled_accessibility_services")
+        }.getOrNull()
+        val known = fromManager.map { it.packageName }.toSet()
+        val extra = AccessibilityServices.packagesFromSecureSetting(secure) - known
+        return fromManager + extra.map { packageName ->
+            AccessibilityServiceRef(packageName = packageName, isSystemApp = isSystemPackage(packageName))
+        }
+    }
+
+    private fun isSystemPackage(packageName: String): Boolean = try {
+        val flags = pm.getApplicationInfo(packageName, 0).flags
+        flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
+    }
 
     override fun isDebuggerConnected(): Boolean = Debug.isDebuggerConnected() || Debug.waitingForDebugger()
 

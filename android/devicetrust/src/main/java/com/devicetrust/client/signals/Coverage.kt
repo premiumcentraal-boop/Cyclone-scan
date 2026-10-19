@@ -16,6 +16,8 @@ enum class CheckReason {
     ACCESS_DENIED,
     /** Some inputs were readable and showed nothing; at least one was not. */
     PARTIAL_COVERAGE,
+    /** The check can only see this app's own process; a framework injected elsewhere is not visible. */
+    SCOPE_LIMITED,
     READ_ERROR,
     MALFORMED,
     TOO_LARGE,
